@@ -3,9 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
 <title>Laserroboter Einsatzplan 2026</title>
 <!-- PWA -->
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -310,7 +307,7 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
 /* ═══════════════════════════════════════════════════════════════
    CONSTANTS & STATE
 ═══════════════════════════════════════════════════════════════ */
-const SK='lrplan_v11';
+const SK='lrplan_v10';
 const FK='lrplan_firebase_cfg'; // separate localStorage key for Firebase config
 
 /* ═══════════════════════════════════════════════════════════════
@@ -388,9 +385,8 @@ function startListener(betrieb){
 
 function scheduleSyncToCloud(){
   if(!db||!fbCfg)return;
-  clearTimeout(syncTimer);
   syncDot('syncing');
-  syncTimer=setTimeout(()=>syncToCloud(),800); // faster: 800ms instead of 1500ms
+  syncToCloud(); // sofort – kein Delay
 }
 
 async function syncToCloud(){
