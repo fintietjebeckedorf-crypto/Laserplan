@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Laserroboter Einsatzplan 2026</title>
 <!-- PWA -->
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -307,7 +310,7 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
 /* ═══════════════════════════════════════════════════════════════
    CONSTANTS & STATE
 ═══════════════════════════════════════════════════════════════ */
-const SK='lrplan_v10';
+const SK='lrplan_v11';
 const FK='lrplan_firebase_cfg'; // separate localStorage key for Firebase config
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1086,12 +1089,7 @@ function ddMoveHandler(e){
     const age=dDiff(b.sowing,TODAY);
     const g=_ghost();
     g.textContent=`${(b.kultur||'').replace(/^\d+\s*/,'')} S${b.satz} · ${(b.flaeche||0).toFixed(2)} ha`;
-    g.style.cssText=`display:block;position:fixed;z-index:99999;pointer-events:none;
-      padding:8px 13px;border-radius:9px;font-size:.75rem;font-weight:700;
-      box-shadow:0 8px 28px rgba(0,0,0,.35);white-space:nowrap;
-      background:${m.colorLight||'#EAF3DE'};color:${m.color||'#27500A'};
-      border:2px solid ${m.color||'#639922'};
-      transform:scale(1.05);`;
+    g.style.cssText='display:block;position:fixed;z-index:99999;pointer-events:none;padding:8px 13px;border-radius:9px;font-size:.75rem;font-weight:700;box-shadow:0 8px 28px rgba(0,0,0,.35);white-space:nowrap;transform:scale(1.05);background:'+(m.colorLight||'#EAF3DE')+';color:'+(m.color||'#27500A')+';border:2px solid '+(m.color||'#639922')+';';
     document.querySelectorAll('.day-col,.wpool').forEach(z=>z.classList.add('drop-active'));
     document.body.style.userSelect='none';
     document.body.style.webkitUserSelect='none';
