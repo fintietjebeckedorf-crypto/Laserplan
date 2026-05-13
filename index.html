@@ -321,7 +321,7 @@ let db=null;
 let fbCfg=null;
 let syncTimer=null;
 let unsubscribe=null;
-let isSyncing=false;
+let _lastWritten=''; // timestamp of last successful cloud write
 
 function loadFbCfg(){
   try{const c=localStorage.getItem(FK);return c?JSON.parse(c):null;}catch(e){return null;}
@@ -331,17 +331,13 @@ function syncDot(state){
   const el=document.getElementById('syncDot');
   if(!el)return;
   el.className='sync-dot'+(state==='syncing'?' syncing':state==='error'?' error':'');
-  el.title=state==='ok'?'Cloud-Sync aktiv ✓':state==='syncing'?'Wird synchronisiert...':state==='error'?'Sync-Fehler':'Kein Sync';
+  el.title=state==='ok'?'Cloud-Sync aktiv ✓':state==='syncing'?'Wird gespeichert...':state==='error'?'Sync-Fehler':'Kein Sync';
 }
 
 function initFirebase(cfg){
   try{
-    // Re-use existing app if already initialised
-    if(!firebase.apps.length){
-      firebase.initializeApp(cfg);
-    }
+    if(!firebase.apps.length)firebase.initializeApp(cfg);
     db=firebase.firestore();
-    // Offline persistence so tablet works without WiFi
     db.enablePersistence({synchronizeTabs:true}).catch(()=>{});
     fbCfg=cfg;
     syncDot('ok');
@@ -359,29 +355,30 @@ function startListener(betrieb){
   unsubscribe=db.collection('betriebe').doc(betrieb)
     .onSnapshot(snap=>{
       if(!snap.exists){
-        // No data yet in cloud – push local data up
-        if(S.batches.length)syncToCloud();
-        syncDot('ok');
-        return;
+        if(S.batches.length||S.machines.length)syncToCloud();
+        syncDot('ok');return;
       }
       const remote=snap.data();
       if(!remote||!remote.lastUpdate){syncDot('ok');return;}
-      // Apply if remote is newer OR if local has no batches
-      const remoteNewer=remote.lastUpdate>=(S.lastUpdate||'');
-      const localEmpty=!S.batches.length;
-      if(remoteNewer||localEmpty){
-        if(remote.lastUpdate!==(S.lastUpdate||'')||localEmpty){
-          S=remote;
-          localStorage.setItem(SK,JSON.stringify(S));
-          renderMachineBar();
-          renderAll();
-          syncDot('ok');
-          if(localEmpty&&S.batches.length)toast('Daten aus Firebase geladen ✓');
-        }
+
+      // Skip if WE just wrote this (avoid echo loop)
+      if(remote.lastUpdate===_lastWritten){syncDot('ok');return;}
+
+      // Apply remote if strictly newer than local
+      const localTs=S.lastUpdate||'';
+      if(remote.lastUpdate>localTs){
+        const wasEmpty=!S.batches.length;
+        S=remote;
+        localStorage.setItem(SK,JSON.stringify(S));
+        renderMachineBar();
+        renderAll();
+        syncDot('ok');
+        if(wasEmpty&&S.batches.length)toast('☁ Daten aus Firebase geladen ✓');
+        else toast('☁ Plan aktualisiert');
       }
       syncDot('ok');
     },err=>{
-      console.error('Firestore listener error',err);
+      console.error('Firestore error',err);
       syncDot('error');
     });
 }
@@ -390,13 +387,15 @@ function scheduleSyncToCloud(){
   if(!db||!fbCfg)return;
   clearTimeout(syncTimer);
   syncDot('syncing');
-  syncTimer=setTimeout(()=>syncToCloud(),1500);
+  syncTimer=setTimeout(()=>syncToCloud(),800); // faster: 800ms instead of 1500ms
 }
 
 async function syncToCloud(){
   if(!db||!fbCfg)return;
   try{
-    await db.collection('betriebe').doc(fbCfg.betrieb).set(S);
+    const dataToWrite=JSON.parse(JSON.stringify(S)); // deep clone
+    await db.collection('betriebe').doc(fbCfg.betrieb).set(dataToWrite);
+    _lastWritten=dataToWrite.lastUpdate; // remember what WE wrote
     syncDot('ok');
   }catch(e){
     console.error('Sync error',e);
@@ -1046,64 +1045,76 @@ function renderWoche(m){
   document.getElementById('tc').innerHTML=html;
 }
 
-/* ── DRAG & DROP ── */
-function _ghost(){return document.getElementById('dg');}
+/* ── DRAG & DROP (Mouse + Touch, iOS-safe) ── */
+const DD={id:null,mid:null,el:null,active:false,curZone:null,startX:0,startY:0};
+
+function _ghost(){
+  let g=document.getElementById('dg');
+  if(!g){g=document.createElement('div');g.id='dg';document.body.appendChild(g);}
+  return g;
+}
+
+function _clientXY(e){
+  if(e.touches&&e.touches.length)return{x:e.touches[0].clientX,y:e.touches[0].clientY};
+  if(e.changedTouches&&e.changedTouches.length)return{x:e.changedTouches[0].clientX,y:e.changedTouches[0].clientY};
+  return{x:e.clientX,y:e.clientY};
+}
 
 function ddDown(e,id,mid){
   if(e.type==='mousedown'&&e.button!==0)return;
-  e.preventDefault();e.stopPropagation();
-  const el=e.currentTarget;
-  const rect=el.getBoundingClientRect();
-  const cx=e.touches?e.touches[0].clientX:e.clientX;
-  const cy=e.touches?e.touches[0].clientY:e.clientY;
-  DD.id=id;DD.mid=mid;DD.el=el;DD.active=false;
-  DD.ox=cx-rect.left;DD.oy=cy-rect.top;
-  // iOS: prevent scroll during drag
-  document.body.style.overflow='hidden';
-  document.body.style.touchAction='none';
-
-  let g=_ghost();
-  if(!g){g=document.createElement('div');g.id='dg';document.body.appendChild(g);}
-  const b=S.batches.find(x=>x.id===id)||{};
-  const m=getMachine(mid)||{};
-  const age=dDiff(b.sowing,TODAY);
-  g.innerHTML=`<span style="font-weight:700">${(b.kultur||'').replace(/^\d+\s*/,'')} S${b.satz}</span><br>
-    <span style="opacity:.8">${(b.flaeche||0).toFixed(2)} ha · Schl.${b.schlag||'–'}${age>7?' · <b>'+age+'d ⚠</b>':''}</span>`;
-  g.style.cssText=`display:none;position:fixed;z-index:99999;pointer-events:none;padding:6px 11px;border-radius:8px;font-size:.7rem;line-height:1.4;box-shadow:0 8px 24px rgba(0,0,0,.28);background:${m.colorLight||'#EAF3DE'};color:${m.color||'#27500A'};border:1.5px solid ${m.color||'#639922'};min-width:120px;`;
+  e.preventDefault();
+  e.stopPropagation();
+  const {x,y}=_clientXY(e);
+  DD.id=id;DD.mid=mid;DD.el=e.currentTarget;
+  DD.active=false;DD.curZone=null;
+  DD.startX=x;DD.startY=y;
 }
 
-document.addEventListener('mousemove',ddMove);
-document.addEventListener('mouseup',ddUp);
-document.addEventListener('touchmove',e=>ddMove(e),{passive:false});
-document.addEventListener('touchend',ddUp);
-document.addEventListener('touchcancel',e=>{
-  document.body.style.overflow='';
-  document.body.style.touchAction='';
-  ddUp(e);
-});
-
-function ddMove(e){
+function ddMoveHandler(e){
   if(!DD.id)return;
-  e.preventDefault();
-  const touch=e.touches?e.touches[0]:null;
-  const cx=touch?touch.clientX:e.clientX;
-  const cy=touch?touch.clientY:e.clientY;
+  const {x,y}=_clientXY(e);
+  const dx=x-DD.startX, dy=y-DD.startY;
+
   if(!DD.active){
+    // Only start drag after moving 8px (avoids accidental drags)
+    if(Math.sqrt(dx*dx+dy*dy)<8)return;
     DD.active=true;
     DD.el&&DD.el.classList.add('is-dragging');
-    const g=_ghost();if(g)g.style.display='block';
+    // Build ghost
+    const b=S.batches.find(b=>b.id===DD.id)||{};
+    const m=getMachine(DD.mid)||{};
+    const age=dDiff(b.sowing,TODAY);
+    const g=_ghost();
+    g.textContent=`${(b.kultur||'').replace(/^\d+\s*/,'')} S${b.satz} · ${(b.flaeche||0).toFixed(2)} ha`;
+    g.style.cssText=`display:block;position:fixed;z-index:99999;pointer-events:none;
+      padding:8px 13px;border-radius:9px;font-size:.75rem;font-weight:700;
+      box-shadow:0 8px 28px rgba(0,0,0,.35);white-space:nowrap;
+      background:${m.colorLight||'#EAF3DE'};color:${m.color||'#27500A'};
+      border:2px solid ${m.color||'#639922'};
+      transform:scale(1.05);`;
     document.querySelectorAll('.day-col,.wpool').forEach(z=>z.classList.add('drop-active'));
+    document.body.style.userSelect='none';
+    document.body.style.webkitUserSelect='none';
+    document.body.style.overflow='hidden';
   }
+
+  e.preventDefault();
+
+  // Move ghost
   const g=_ghost();
-  if(g){
-    g.style.left=(cx+10)+'px';
-    g.style.top=(cy-30)+'px';
-  }
-  // Hide ghost to use elementFromPoint, then show again
-  if(g)g.style.visibility='hidden';
-  const hit=document.elementFromPoint(cx,cy);
-  if(g)g.style.visibility='visible';
-  const zone=hit?(hit.closest('.day-col[data-mid]')||hit.closest('.wpool[data-mid]')):null;
+  g.style.left=(x+14)+'px';
+  g.style.top=(y-40)+'px';
+
+  // Find drop zone using elementFromPoint
+  // Temporarily hide ghost so it doesn't interfere
+  g.style.visibility='hidden';
+  const hit=document.elementFromPoint(x,y);
+  g.style.visibility='visible';
+
+  const zone=hit
+    ?(hit.closest('.day-col[data-mid]')||hit.closest('.wpool[data-mid]'))
+    :null;
+
   if(zone!==DD.curZone){
     DD.curZone&&DD.curZone.classList.remove('drop-over');
     zone&&zone.classList.add('drop-over');
@@ -1111,25 +1122,29 @@ function ddMove(e){
   }
 }
 
-function ddUp(e){
+function ddUpHandler(e){
   if(!DD.id)return;
-  const g=_ghost();if(g)g.style.display='none';
-  document.querySelectorAll('.drop-active,.drop-over').forEach(z=>z.classList.remove('drop-active','drop-over'));
+
+  // Cleanup ghost and highlights
+  const g=_ghost();
+  g.style.display='none';
+  document.querySelectorAll('.drop-active,.drop-over').forEach(z=>
+    z.classList.remove('drop-active','drop-over'));
   DD.el&&DD.el.classList.remove('is-dragging');
+  document.body.style.userSelect='';
+  document.body.style.webkitUserSelect='';
+  document.body.style.overflow='';
 
   if(DD.active&&DD.curZone){
-    const zone=DD.curZone;
     const id=DD.id;
-    const mid=DD.mid; // source machine
-    // Target machine from the zone's data-mid
-    const targetMid=zone.dataset.mid||mid;
+    const toPool=DD.curZone.classList.contains('wpool');
+    const targetDs=DD.curZone.dataset.ds||null;
+    const targetMid=DD.curZone.dataset.mid||DD.mid;
+    const sourceM=getMachine(DD.mid);
     const targetM=getMachine(targetMid);
-    const sourceM=getMachine(mid);
-    const toPool=zone.classList.contains('wpool');
-    const targetDs=zone.dataset.ds||null;
 
-    if(targetM&&sourceM){
-      // Remove from source machine's weekPlan
+    if(sourceM&&targetM){
+      // Remove from ALL days of source machine
       Object.keys(sourceM.weekPlan).forEach(d=>{
         sourceM.weekPlan[d]=(sourceM.weekPlan[d]||[]).filter(x=>x!==id);
         if(!sourceM.weekPlan[d].length)delete sourceM.weekPlan[d];
@@ -1137,17 +1152,34 @@ function ddUp(e){
 
       if(!toPool&&targetDs){
         if(!targetM.weekPlan[targetDs])targetM.weekPlan[targetDs]=[];
-        targetM.weekPlan[targetDs].push(id);
+        if(!targetM.weekPlan[targetDs].includes(id))
+          targetM.weekPlan[targetDs].push(id);
       }
-      save();renderWoche(activeMachine());renderKPIs(activeMachine());
-      toast(`Gespeichert${targetMid!==mid?' → '+targetM.name:''} ✓`);
+
+      save();
+      renderWoche(activeMachine());
+      renderKPIs(activeMachine());
+      toast(`Gespeichert${targetMid!==DD.mid?' → '+targetM.name:''} ✓`);
     }
   }
+
   DD.id=null;DD.mid=null;DD.el=null;DD.active=false;DD.curZone=null;
-  // Restore scroll
-  document.body.style.overflow='';
-  document.body.style.touchAction='';
 }
+
+// Global listeners – mouse
+document.addEventListener('mousemove',ddMoveHandler,{passive:false});
+document.addEventListener('mouseup',ddUpHandler);
+// Global listeners – touch (passive:false so we can preventDefault)
+document.addEventListener('touchmove',ddMoveHandler,{passive:false});
+document.addEventListener('touchend',ddUpHandler,{passive:false});
+document.addEventListener('touchcancel',e=>{
+  const g=_ghost();if(g)g.style.display='none';
+  document.querySelectorAll('.drop-active,.drop-over,.is-dragging')
+    .forEach(el=>el.classList.remove('drop-active','drop-over','is-dragging'));
+  document.body.style.overflow='';
+  DD.id=null;DD.active=false;DD.el=null;DD.curZone=null;
+});
+
 
 /* ── TAB 3: ALLE SÄTZE ── */
 function renderAlle(m){
