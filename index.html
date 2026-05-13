@@ -418,12 +418,24 @@ const MCL=['#E6F1FB','#EAF3DE','#FAEEDA','#F0E8F8','#E1F5EE','#FDEAEA','#E0F4FA'
 
 let S=loadState();
 let activeTab='heute';
-let wKulturHide=new Set(); // Set of kultur strings to HIDE
+let wKulturHide=new Set();
+
+function swTab(name,el){
+  activeTab=name;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  const m=activeMachine();if(m)renderTab(name,m);
+}
+function renderTab(n,m){
+  if(n==='heute')renderHeute(m);
+  else if(n==='woche')renderWoche(m);
+  else renderAlle(m);
+}
+ // Set of kultur strings to HIDE
 let modalMid=null; // machine id being edited
 let selectedColor=0;
 
 /* ── DRAG STATE ── */
-const DD={id:null,src:null,el:null,active:false,curZone:null,ox:0,oy:0};
 
 function loadState(){
   try{const s=localStorage.getItem(SK);if(s)return JSON.parse(s);}catch(e){}
@@ -723,29 +735,9 @@ function renderKPIs(m){
 }
 
 /* ── TAB SWITCH ── */
-function swTab(name,el){
-  activeTab=name;
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  el.classList.add('active');
-  const m=activeMachine();if(m)renderTab(name,m);
-}
-function renderTab(n,m){
-  if(n==='heute')renderHeute(m);
-  else if(n==='woche')renderWoche(m);
-  else renderAlle(m);
-}
 
 /* ── TAB 1: HEUTE ── */
 function renderHeute(m){
-  if(!S.batches.length){
-    document.getElementById('tc').innerHTML=`
-      <div style="text-align:center;padding:3rem 1rem;color:var(--tm);">
-        <div style="font-size:2rem;margin-bottom:.5rem">📂</div>
-        <div style="font-weight:600;margin-bottom:.4rem">Noch keine Kulturdaten</div>
-        <div style="font-size:.82rem">Oben auf <strong>↑ Kulturliste laden</strong> tippen.</div>
-      </div>`;
-    return;
-  }
   const open=getOpen(m);
   const runB=m.running?S.batches.find(b=>b.id===m.running):null;
   const runActive=runB&&!m.comp[runB.id]?.done;
@@ -917,18 +909,6 @@ function renderWoche(m){
 
   // Stats for filter label – pool only
 
-  // Show loading hint if no batches yet
-  if(!S.batches.length){
-    document.getElementById('tc').innerHTML=`
-      <div style="text-align:center;padding:3rem 1rem;color:var(--tm);">
-        <div style="font-size:2rem;margin-bottom:.5rem">📂</div>
-        <div style="font-weight:600;margin-bottom:.4rem">Noch keine Kulturdaten geladen</div>
-        <div style="font-size:.82rem;margin-bottom:1rem">Oben auf <strong>↑ Kulturliste laden</strong> tippen und deine Excel-Datei auswählen.</div>
-        <div style="font-size:.75rem;color:var(--green)">💡 Wenn Firebase verbunden ist, laden die Daten gleich automatisch.</div>
-      </div>`;
-    return;
-  }
-
   let html=`
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:.55rem;">
     <div style="display:flex;align-items:center;gap:6px;">
@@ -1023,7 +1003,9 @@ function renderWoche(m){
 
   if(!poolSorted.length){
     html+=`<div style="font-size:.73rem;color:var(--tm);padding:4px 6px">
-      ${pool.length&&anyHidden?'Keine sichtbaren Kulturen im Pool':'Alle eingeplant ✓'}
+      ${!S.batches.length
+        ?'⬆ Kulturliste laden um Sätze zu sehen'
+        :pool.length&&anyHidden?'Keine sichtbaren Kulturen im Pool':'Alle eingeplant ✓'}
     </div>`;
   } else {
     poolSorted.forEach(b=>{
