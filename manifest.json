@@ -1,0 +1,19 @@
+{
+  "name": "Laserroboter Einsatzplan 2026",
+  "short_name": "Laserplan",
+  "description": "Mehrmaschinen-Planung für Laserroboter",
+  "start_url": "/Laserplan/",
+  "scope": "/Laserplan/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#172015",
+  "theme_color": "#172015",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='80' fill='%23172015'/><text y='360' x='256' text-anchor='middle' font-size='300'>🌿</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

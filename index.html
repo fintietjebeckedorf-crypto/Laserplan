@@ -2,8 +2,16 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Laserroboter Einsatzplan 2026</title>
+<!-- PWA -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Laserplan">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#172015">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23172015'/><text y='68' x='50' text-anchor='middle' font-size='55'>🌿</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -29,7 +37,7 @@
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;}
 
 /* ── HEADER ── */
-header{background:#172015;color:#fff;padding:.65rem 1.1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;border-bottom:2px solid var(--gm);}
+header{background:#172015;color:#fff;padding:env(safe-area-inset-top,.65rem) 1.1rem .65rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;border-bottom:2px solid var(--gm);}
 header h1{font-size:.95rem;font-weight:700;}
 header .sub{font-size:.68rem;color:#9FE1CB;margin-top:1px;}
 .hbtn{display:inline-flex;align-items:center;gap:4px;padding:.28rem .6rem;border-radius:7px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.07);color:#9FE1CB;font-size:.72rem;cursor:pointer;transition:background .12s;}
@@ -878,7 +886,9 @@ function renderWoche(m){
   const pool=allOpen.filter(b=>!scheduledIds.has(b.id));
   const kulturen=[...new Set(allOpen.map(b=>b.kultur))].sort();
 
-  // Pool filter via wKulturHide set (already computed above)
+  // Pool filter via wKulturHide – hide selected kulturen
+  const poolF=pool.filter(b=>!wKulturHide.has(b.kultur));
+  const anyHidden=wKulturHide.size>0;
   const poolSorted=[...poolF].sort((a,b)=>dDiff(b.sowing,TODAY)-dDiff(a.sowing,TODAY));
 
   // Other machines planned
