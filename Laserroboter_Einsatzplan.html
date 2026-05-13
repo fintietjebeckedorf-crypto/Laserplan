@@ -2,8 +2,16 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Laserroboter Einsatzplan 2026</title>
+<!-- PWA -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Laserplan">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#172015">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23172015'/><text y='68' x='50' text-anchor='middle' font-size='55'>🌿</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -29,7 +37,7 @@
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;}
 
 /* ── HEADER ── */
-header{background:#172015;color:#fff;padding:.65rem 1.1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;border-bottom:2px solid var(--gm);}
+header{background:#172015;color:#fff;padding:env(safe-area-inset-top,.65rem) 1.1rem .65rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;border-bottom:2px solid var(--gm);}
 header h1{font-size:.95rem;font-weight:700;}
 header .sub{font-size:.68rem;color:#9FE1CB;margin-top:1px;}
 .hbtn{display:inline-flex;align-items:center;gap:4px;padding:.28rem .6rem;border-radius:7px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.07);color:#9FE1CB;font-size:.72rem;cursor:pointer;transition:background .12s;}
@@ -95,7 +103,7 @@ header .sub{font-size:.68rem;color:#9FE1CB;margin-top:1px;}
 .cap-warn{color:var(--red);font-weight:700;}
 
 /* Batch card in week plan */
-.wcard{border-radius:5px;padding:4px 7px;margin-bottom:3px;font-size:.7rem;cursor:grab;user-select:none;position:relative;touch-action:none;border:.5px solid transparent;}
+.wcard{border-radius:5px;padding:4px 7px;margin-bottom:3px;font-size:.7rem;cursor:grab;user-select:none;-webkit-user-select:none;position:relative;touch-action:none;-webkit-touch-callout:none;border:.5px solid transparent;}
 .wcard.day-c{background:var(--gl);color:var(--gd);border-color:rgba(99,153,34,.25);}
 .wcard.nacht-c{background:#172015;color:#9FE1CB;border-color:rgba(159,225,203,.15);}
 .wcard.overdue-c{border-left:3px solid var(--red);}
@@ -107,10 +115,10 @@ header .sub{font-size:.68rem;color:#9FE1CB;margin-top:1px;}
 /* Pool */
 .pool-section{margin-bottom:.85rem;}
 .pool-title{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--tm);margin-bottom:.4rem;}
-.pool{display:flex;flex-wrap:wrap;gap:5px;min-height:48px;padding:7px;background:var(--card);border:.5px solid var(--border);border-radius:var(--r);}
+.pool{display:flex;flex-wrap:wrap;gap:5px;min-height:48px;padding:7px;background:var(--card);border:.5px solid var(--border);border-radius:var(--r);-webkit-overflow-scrolling:touch;}
 .pool.wpool.drop-active{background:#fff8ec;border-color:var(--am);border-style:dashed;}
 .pool.wpool.drop-over{background:#fde8bb;border-color:var(--amber);border-width:2px;}
-.pcard{background:var(--grl);color:var(--gray);border-radius:5px;padding:4px 8px;font-size:.7rem;cursor:grab;user-select:none;border:.5px solid var(--border);touch-action:none;}
+.pcard{background:var(--grl);color:var(--gray);border-radius:5px;padding:4px 8px;font-size:.7rem;cursor:grab;user-select:none;-webkit-user-select:none;border:.5px solid var(--border);touch-action:none;-webkit-touch-callout:none;}
 .pcard.hot{background:var(--rl);color:var(--red);}
 .pcard.is-dragging{opacity:.2;}
 .pcard .pk{font-weight:700;}
@@ -350,20 +358,28 @@ function startListener(betrieb){
   if(unsubscribe)unsubscribe();
   unsubscribe=db.collection('betriebe').doc(betrieb)
     .onSnapshot(snap=>{
-      if(!snap.exists)return;
+      if(!snap.exists){
+        // No data yet in cloud – push local data up
+        if(S.batches.length)syncToCloud();
+        syncDot('ok');
+        return;
+      }
       const remote=snap.data();
-      if(!remote||!remote.lastUpdate)return;
-      // Only apply if remote is newer than local
-      if(remote.lastUpdate>=(S.lastUpdate||'')){
-        const localUpdated=S.lastUpdate||'';
-        if(remote.lastUpdate!==localUpdated){
+      if(!remote||!remote.lastUpdate){syncDot('ok');return;}
+      // Apply if remote is newer OR if local has no batches
+      const remoteNewer=remote.lastUpdate>=(S.lastUpdate||'');
+      const localEmpty=!S.batches.length;
+      if(remoteNewer||localEmpty){
+        if(remote.lastUpdate!==(S.lastUpdate||'')||localEmpty){
           S=remote;
           localStorage.setItem(SK,JSON.stringify(S));
           renderMachineBar();
           renderAll();
           syncDot('ok');
+          if(localEmpty&&S.batches.length)toast('Daten aus Firebase geladen ✓');
         }
       }
+      syncDot('ok');
     },err=>{
       console.error('Firestore listener error',err);
       syncDot('error');
@@ -723,6 +739,15 @@ function renderTab(n,m){
 
 /* ── TAB 1: HEUTE ── */
 function renderHeute(m){
+  if(!S.batches.length){
+    document.getElementById('tc').innerHTML=`
+      <div style="text-align:center;padding:3rem 1rem;color:var(--tm);">
+        <div style="font-size:2rem;margin-bottom:.5rem">📂</div>
+        <div style="font-weight:600;margin-bottom:.4rem">Noch keine Kulturdaten</div>
+        <div style="font-size:.82rem">Oben auf <strong>↑ Kulturliste laden</strong> tippen.</div>
+      </div>`;
+    return;
+  }
   const open=getOpen(m);
   const runB=m.running?S.batches.find(b=>b.id===m.running):null;
   const runActive=runB&&!m.comp[runB.id]?.done;
@@ -878,7 +903,9 @@ function renderWoche(m){
   const pool=allOpen.filter(b=>!scheduledIds.has(b.id));
   const kulturen=[...new Set(allOpen.map(b=>b.kultur))].sort();
 
-  // Pool filter via wKulturHide set (already computed above)
+  // Pool filter via wKulturHide – hide selected kulturen
+  const poolF=pool.filter(b=>!wKulturHide.has(b.kultur));
+  const anyHidden=wKulturHide.size>0;
   const poolSorted=[...poolF].sort((a,b)=>dDiff(b.sowing,TODAY)-dDiff(a.sowing,TODAY));
 
   // Other machines planned
@@ -891,6 +918,18 @@ function renderWoche(m){
   });
 
   // Stats for filter label – pool only
+
+  // Show loading hint if no batches yet
+  if(!S.batches.length){
+    document.getElementById('tc').innerHTML=`
+      <div style="text-align:center;padding:3rem 1rem;color:var(--tm);">
+        <div style="font-size:2rem;margin-bottom:.5rem">📂</div>
+        <div style="font-weight:600;margin-bottom:.4rem">Noch keine Kulturdaten geladen</div>
+        <div style="font-size:.82rem;margin-bottom:1rem">Oben auf <strong>↑ Kulturliste laden</strong> tippen und deine Excel-Datei auswählen.</div>
+        <div style="font-size:.75rem;color:var(--green)">💡 Wenn Firebase verbunden ist, laden die Daten gleich automatisch.</div>
+      </div>`;
+    return;
+  }
 
   let html=`
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:.55rem;">
@@ -947,7 +986,7 @@ function renderWoche(m){
       </div>`;
 
     if(!day.items.length){
-      html+=`<div style="font-size:.66rem;color:var(--tm);text-align:center;padding:5px 0;opacity:.6">Hier ablegen</div>`;
+      html+=`<div style="font-size:.64rem;color:var(--tm);text-align:center;padding:6px 2px;opacity:.55">Hierher ziehen</div>`;
     }
 
     let prevS=null;
@@ -1019,6 +1058,9 @@ function ddDown(e,id,mid){
   const cy=e.touches?e.touches[0].clientY:e.clientY;
   DD.id=id;DD.mid=mid;DD.el=el;DD.active=false;
   DD.ox=cx-rect.left;DD.oy=cy-rect.top;
+  // iOS: prevent scroll during drag
+  document.body.style.overflow='hidden';
+  document.body.style.touchAction='none';
 
   let g=_ghost();
   if(!g){g=document.createElement('div');g.id='dg';document.body.appendChild(g);}
@@ -1034,24 +1076,33 @@ document.addEventListener('mousemove',ddMove);
 document.addEventListener('mouseup',ddUp);
 document.addEventListener('touchmove',e=>ddMove(e),{passive:false});
 document.addEventListener('touchend',ddUp);
-document.addEventListener('touchcancel',ddUp);
+document.addEventListener('touchcancel',e=>{
+  document.body.style.overflow='';
+  document.body.style.touchAction='';
+  ddUp(e);
+});
 
 function ddMove(e){
   if(!DD.id)return;
-  const cx=e.touches?e.touches[0].clientX:e.clientX;
-  const cy=e.touches?e.touches[0].clientY:e.clientY;
+  e.preventDefault();
+  const touch=e.touches?e.touches[0]:null;
+  const cx=touch?touch.clientX:e.clientX;
+  const cy=touch?touch.clientY:e.clientY;
   if(!DD.active){
     DD.active=true;
     DD.el&&DD.el.classList.add('is-dragging');
     const g=_ghost();if(g)g.style.display='block';
     document.querySelectorAll('.day-col,.wpool').forEach(z=>z.classList.add('drop-active'));
   }
-  e.preventDefault();
   const g=_ghost();
-  if(g){g.style.left=(cx-DD.ox+6)+'px';g.style.top=(cy-DD.oy-10)+'px';}
-  if(g)g.style.display='none';
+  if(g){
+    g.style.left=(cx+10)+'px';
+    g.style.top=(cy-30)+'px';
+  }
+  // Hide ghost to use elementFromPoint, then show again
+  if(g)g.style.visibility='hidden';
   const hit=document.elementFromPoint(cx,cy);
-  if(g)g.style.display='block';
+  if(g)g.style.visibility='visible';
   const zone=hit?(hit.closest('.day-col[data-mid]')||hit.closest('.wpool[data-mid]')):null;
   if(zone!==DD.curZone){
     DD.curZone&&DD.curZone.classList.remove('drop-over');
@@ -1093,6 +1144,9 @@ function ddUp(e){
     }
   }
   DD.id=null;DD.mid=null;DD.el=null;DD.active=false;DD.curZone=null;
+  // Restore scroll
+  document.body.style.overflow='';
+  document.body.style.touchAction='';
 }
 
 /* ── TAB 3: ALLE SÄTZE ── */
