@@ -14,8 +14,8 @@
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23172015'/><text y='68' x='50' text-anchor='middle' font-size='55'>🌿</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <!-- Firebase -->
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/firebase@10.12.0/firebase-app-compat.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/firebase@10.12.0/firebase-firestore-compat.min.js"></script>
 <style>
 :root{
   --green:#3B6D11;--gl:#EAF3DE;--gm:#639922;--gd:#27500A;
@@ -194,7 +194,6 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
     <input type="file" id="fileInput" accept=".xlsx,.xls">
     <button class="hbtn" onclick="exportCSV()">↓ Export</button>
     <button class="hbtn" onclick="showSetup()">☁ Firebase</button>
-    <button class="hbtn" onclick="forceLoadFromCloud()" title="Neueste Daten laden">↻ Sync</button>
     <button class="hbtn danger" onclick="hardReset()">Reset</button>
   </div>
 </header>
@@ -320,10 +319,9 @@ const FK='lrplan_firebase_cfg'; // separate localStorage key for Firebase config
 ═══════════════════════════════════════════════════════════════ */
 let db=null;
 let fbCfg=null;
+let syncTimer=null;
 let unsubscribe=null;
-let _syncing=false;
-let _pendingWrite=false;
-let _deviceId=Math.random().toString(36).slice(2); // unique per browser tab
+let _lastWritten=''; // timestamp of last successful cloud write
 
 function loadFbCfg(){
   try{const c=localStorage.getItem(FK);return c?JSON.parse(c):null;}catch(e){return null;}
@@ -333,7 +331,7 @@ function syncDot(state){
   const el=document.getElementById('syncDot');
   if(!el)return;
   el.className='sync-dot'+(state==='syncing'?' syncing':state==='error'?' error':'');
-  el.title={ok:'Cloud-Sync aktiv ✓',syncing:'Wird gespeichert...',error:'Sync-Fehler',none:'Kein Sync'}[state]||'';
+  el.title=state==='ok'?'Cloud-Sync aktiv ✓':state==='syncing'?'Wird gespeichert...':state==='error'?'Sync-Fehler':'Kein Sync';
 }
 
 function initFirebase(cfg){
@@ -344,11 +342,9 @@ function initFirebase(cfg){
     fbCfg=cfg;
     syncDot('ok');
     startListener(cfg.betrieb);
-    // Always fetch latest data on load – don't rely on listener alone
-    setTimeout(()=>forceLoadFromCloud(), 800);
     return true;
   }catch(e){
-    console.error('Firebase init:',e);
+    console.error('Firebase init error',e);
     syncDot('error');
     return false;
   }
@@ -359,86 +355,118 @@ function startListener(betrieb){
   unsubscribe=db.collection('betriebe').doc(betrieb)
     .onSnapshot(snap=>{
       if(!snap.exists){
-        // Nothing in cloud yet - push our data up
-        if(S.batches.length||S.machines.length)writeToCloud();
-        syncDot('ok');
-        return;
+        if(S.batches.length||S.machines.length)syncToCloud();
+        syncDot('ok');return;
       }
       const remote=snap.data();
       if(!remote||!remote.lastUpdate){syncDot('ok');return;}
 
-      // Skip our own writes (deviceId match + same timestamp)
-      if(remote._deviceId===_deviceId&&remote.lastUpdate===S.lastUpdate){
-        syncDot('ok');return;
-      }
+      // Skip if WE just wrote this (avoid echo loop)
+      if(remote.lastUpdate===_lastWritten){syncDot('ok');return;}
 
-      // Apply remote if it is newer than what we have locally
-      if(remote.lastUpdate>(S.lastUpdate||'')){
+      // Apply remote if strictly newer than local
+      const localTs=S.lastUpdate||'';
+      if(remote.lastUpdate>localTs){
         const wasEmpty=!S.batches.length;
-        // Merge carefully: keep local data if remote has none
         S=remote;
         localStorage.setItem(SK,JSON.stringify(S));
         renderMachineBar();
         renderAll();
         syncDot('ok');
-        if(wasEmpty&&S.batches.length)toast('☁ Daten geladen ✓');
-        else toast('☁ Aktualisiert');
-      } else {
-        syncDot('ok');
+        if(wasEmpty&&S.batches.length)toast('☁ Daten aus Firebase geladen ✓');
+        else toast('☁ Plan aktualisiert');
       }
+      syncDot('ok');
     },err=>{
-      console.error('Firestore:',err);
+      console.error('Firestore error',err);
       syncDot('error');
     });
 }
 
-async function writeToCloud(){
-  if(!db||!fbCfg||_syncing)return;
-  _syncing=true;
-  syncDot('syncing');
-  try{
-    S._deviceId=_deviceId;
-    const data=JSON.parse(JSON.stringify(S));
-    await db.collection('betriebe').doc(fbCfg.betrieb).set(data);
-    syncDot('ok');
-  }catch(e){
-    console.error('Write error:',e);
-    syncDot('error');
-    toast('Sync-Fehler: '+e.message,true);
-  }finally{
-    _syncing=false;
-    if(_pendingWrite){_pendingWrite=false;writeToCloud();}
-  }
-}
-
-// Always fetch latest from Firebase on page load / manual refresh
-async function forceLoadFromCloud(){
-  if(!db||!fbCfg)return;
-  syncDot('syncing');
-  try{
-    const snap=await db.collection('betriebe').doc(fbCfg.betrieb).get();
-    if(!snap.exists){syncDot('ok');return;}
-    const remote=snap.data();
-    if(!remote||!remote.lastUpdate){syncDot('ok');return;}
-    // Always apply cloud data on explicit load (ignore local timestamp)
-    S=remote;
-    localStorage.setItem(SK,JSON.stringify(S));
-    renderMachineBar();
-    renderAll();
-    syncDot('ok');
-    toast('☁ Daten geladen ✓');
-  }catch(e){
-    console.error('Force load error:',e);
-    syncDot('error');
-  }
-}
-
 function scheduleSyncToCloud(){
   if(!db||!fbCfg)return;
-  if(_syncing){_pendingWrite=true;return;} // queue it
-  writeToCloud();
+  clearTimeout(syncTimer);
+  syncDot('syncing');
+  syncTimer=setTimeout(()=>syncToCloud(),800); // faster: 800ms instead of 1500ms
 }
 
+async function syncToCloud(){
+  if(!db||!fbCfg)return;
+  try{
+    const dataToWrite=JSON.parse(JSON.stringify(S)); // deep clone
+    await db.collection('betriebe').doc(fbCfg.betrieb).set(dataToWrite);
+    _lastWritten=dataToWrite.lastUpdate; // remember what WE wrote
+    syncDot('ok');
+  }catch(e){
+    console.error('Sync error',e);
+    syncDot('error');
+    toast('Sync-Fehler: '+e.message,true);
+  }
+}
+
+/* Override save() to also sync to cloud */
+const _localSave=save;
+const TODAY=new Date();TODAY.setHours(0,0,0,0);
+const Tstr=localDateStr(TODAY);
+const DN=['So','Mo','Di','Mi','Do','Fr','Sa'];
+const MC=['#2E75B6','#639922','#BA7517','#7B4EA0','#0F6E56','#C0392B','#1A7F9C'];
+const MCL=['#E6F1FB','#EAF3DE','#FAEEDA','#F0E8F8','#E1F5EE','#FDEAEA','#E0F4FA'];
+
+// State shape:
+// S.machines = [{id, name, color, colorIdx, cap, running, comp:{}, notes:{}, weekPlan:{}}]
+// S.batches  = [...] (shared across all machines)
+// S.activeMachineId = string
+
+let S=loadState();
+let activeTab='heute';
+let wKulturHide=new Set();
+function swTab(name,el){
+  activeTab=name;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  const m=activeMachine();if(m)renderTab(name,m);
+}
+function renderTab(n,m){
+  if(n==='heute')renderHeute(m);
+  else if(n==='woche')renderWoche(m);
+  else renderAlle(m);
+}
+ // Set of kultur strings to HIDE
+let modalMid=null; // machine id being edited
+let selectedColor=0;
+
+/* ── DRAG STATE ── */
+
+function loadState(){
+  try{const s=localStorage.getItem(SK);if(s)return JSON.parse(s);}catch(e){}
+  return{batches:[],machines:[],activeMachineId:null,lastOpened:null};
+}
+function save(){
+  S.lastOpened=Tstr;
+  if(!S.lastUpdate)S.lastUpdate='';
+  S.lastUpdate=new Date().toISOString();
+  localStorage.setItem(SK,JSON.stringify(S));
+  scheduleSyncToCloud();
+}
+
+/* ── DATE HELPERS ── */
+function localDateStr(d){
+  const x=new Date(d);
+  return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
+}
+function xlD(v){
+  const n=parseFloat(v);if(isNaN(n)||n<40000||n>65000)return null;
+  const epoch=new Date(1899,11,30);
+  const tmp=new Date(epoch.getTime()+n*86400000);
+  return new Date(tmp.getFullYear(),tmp.getMonth(),tmp.getDate());
+}
+function fmt(d){return d?new Date(d).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'}):'–';}
+function fmtL(d){return d?new Date(d).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'}):'–';}
+function fmtS(d){return d?new Date(d).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}):'–';}
+function dDiff(a,b){return Math.round((new Date(b)-new Date(a))/86400000);}
+function addDays(d,n){const r=new Date(d);r.setDate(r.getDate()+n);return r;}
+function ds(d){return localDateStr(d);}
+function kw(d){const t=new Date(d);t.setHours(0,0,0,0);t.setDate(t.getDate()+4-(t.getDay()||7));const j=new Date(t.getFullYear(),0,1);return Math.ceil((((t-j)/86400000)+1)/7);}
 
 /* ── MACHINE HELPERS ── */
 function getMachine(id){return S.machines.find(m=>m.id===id);}
@@ -710,6 +738,15 @@ function renderKPIs(m){
 
 /* ── TAB 1: HEUTE ── */
 function renderHeute(m){
+  if(!S.batches.length){
+    document.getElementById('tc').innerHTML=`
+      <div style="text-align:center;padding:3rem 1rem;color:var(--tm);">
+        <div style="font-size:2rem;margin-bottom:.5rem">📂</div>
+        <div style="font-weight:600;margin-bottom:.4rem">Noch keine Kulturdaten</div>
+        <div style="font-size:.82rem">Oben auf <strong>↑ Kulturliste laden</strong> tippen.</div>
+      </div>`;
+    return;
+  }
   const open=getOpen(m);
   const runB=m.running?S.batches.find(b=>b.id===m.running):null;
   const runActive=runB&&!m.comp[runB.id]?.done;
@@ -881,6 +918,18 @@ function renderWoche(m){
 
   // Stats for filter label – pool only
 
+  // Show loading hint if no batches yet
+  if(!S.batches.length){
+    document.getElementById('tc').innerHTML=`
+      <div style="text-align:center;padding:3rem 1rem;color:var(--tm);">
+        <div style="font-size:2rem;margin-bottom:.5rem">📂</div>
+        <div style="font-weight:600;margin-bottom:.4rem">Noch keine Kulturdaten geladen</div>
+        <div style="font-size:.82rem;margin-bottom:1rem">Oben auf <strong>↑ Kulturliste laden</strong> tippen und deine Excel-Datei auswählen.</div>
+        <div style="font-size:.75rem;color:var(--green)">💡 Wenn Firebase verbunden ist, laden die Daten gleich automatisch.</div>
+      </div>`;
+    return;
+  }
+
   let html=`
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:.55rem;">
     <div style="display:flex;align-items:center;gap:6px;">
@@ -975,9 +1024,7 @@ function renderWoche(m){
 
   if(!poolSorted.length){
     html+=`<div style="font-size:.73rem;color:var(--tm);padding:4px 6px">
-      ${!S.batches.length
-        ?'⬆ Kulturliste laden um Sätze zu sehen'
-        :pool.length&&anyHidden?'Keine sichtbaren Kulturen im Pool':'Alle eingeplant ✓'}
+      ${pool.length&&anyHidden?'Keine sichtbaren Kulturen im Pool':'Alle eingeplant ✓'}
     </div>`;
   } else {
     poolSorted.forEach(b=>{
@@ -1388,8 +1435,19 @@ if(betEl&&!betEl.value)betEl.value=_cfgToUse.betrieb||'ams2026';
 // Save to localStorage so it persists
 localStorage.setItem(FK,JSON.stringify(_cfgToUse));
 
-// Init Firebase
-initFirebase(_cfgToUse);
+// Init Firebase – wait for SDK to be ready
+function tryInitFirebase(cfg, attempts){
+  attempts = attempts || 0;
+  if(typeof firebase !== 'undefined'){
+    initFirebase(cfg);
+  } else if(attempts < 50){
+    setTimeout(()=>tryInitFirebase(cfg, attempts+1), 200);
+  } else {
+    console.error('Firebase SDK failed to load');
+    document.getElementById('syncDot').className='sync-dot error';
+  }
+}
+tryInitFirebase(_cfgToUse);
 </script>
 </body>
 </html>
