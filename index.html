@@ -184,7 +184,7 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
 
 <header>
   <div>
-    <h1>🌿 Laserroboter Einsatzplan 2026 <span class="sync-dot" id="syncDot" title="Sync-Status"></span></h1>
+    <h1>🌿 Laserroboter Einsatzplan 2026 <span class="sync-dot" id="syncDot" title="Tippen zum Sync" onclick="forceLoadFromCloud();writeToCloud();" style="cursor:pointer"></span></h1>
     <div class="sub">Mehrmaschinen-Planung · Drag &amp; Drop · 7-Tage-Rhythmus</div>
   </div>
   <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
@@ -201,10 +201,10 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
 <div class="mbar" id="mbar"></div>
 
 <!-- Tabs -->
-<div class="tabs">
-  <div class="tab active" onclick="swTab('heute',this)">📍 Heute</div>
-  <div class="tab" onclick="swTab('woche',this)">📅 Wochenplan</div>
-  <div class="tab" onclick="swTab('alle',this)">📋 Alle Sätze</div>
+<div class="tabs" id="tabBar">
+  <div class="tab active" id="tab-heute" onclick="swTab('heute',this)">📍 Heute</div>
+  <div class="tab" id="tab-woche" onclick="swTab('woche',this)">📅 Wochenplan</div>
+  <div class="tab" id="tab-alle" onclick="swTab('alle',this)">📋 Alle Sätze</div>
 </div>
 
 <div class="main">
@@ -331,18 +331,37 @@ function save(){
   S.lastOpened=Tstr;
   S.lastUpdate=new Date().toISOString();
   localStorage.setItem(SK,JSON.stringify(S));
-  scheduleSyncToCloud();
+  if(fbCfg){
+    writeToCloud();
+  } else {
+    console.warn('save(): fbCfg not set yet – not syncing');
+  }
 }
 
 let activeTab='heute';
 let wKulturHide=new Set();
 
 function swTab(name,el){
-  activeTab=name;
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  el.classList.add('active');
-  const m=activeMachine();if(m)renderTab(name,m);
+  try{
+    activeTab=name;
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    el.classList.add('active');
+    const m=activeMachine();
+    if(m)renderTab(name,m);
+    else renderAll();
+  }catch(e){
+    console.error('swTab error:',e);
+    document.getElementById('tc').innerHTML=
+      '<div style="padding:2rem;color:red">Fehler: '+e.message+'</div>';
+  }
 }
+
+// Also attach via addEventListener after DOM load for iOS compatibility
+document.addEventListener('DOMContentLoaded',function(){
+  document.getElementById('tab-heute').addEventListener('click',function(){swTab('heute',this);});
+  document.getElementById('tab-woche').addEventListener('click',function(){swTab('woche',this);});
+  document.getElementById('tab-alle').addEventListener('click',function(){swTab('alle',this);});
+});
 function renderTab(n,m){
   if(n==='heute')renderHeute(m);
   else if(n==='woche')renderWoche(m);
@@ -388,11 +407,12 @@ function initFirebase(cfg){
 
 function startPolling(){
   if(_pollTimer)clearInterval(_pollTimer);
-  _pollTimer=setInterval(()=>pollFromCloud(),10000);
+  _pollTimer=setInterval(()=>pollFromCloud(),5000);
 }
 
 async function pollFromCloud(){
-  if(!fbCfg||_syncing)return;
+  if(!fbCfg){return;}
+  if(_syncing)return;
   try{
     const url=`${FB_URL}/betriebe/${fbCfg.betrieb}/lastUpdate.json`;
     const r=await fetch(url);
@@ -405,8 +425,10 @@ async function pollFromCloud(){
 }
 
 async function writeToCloud(){
-  if(!fbCfg||_syncing)return;
+  if(!fbCfg){console.warn('writeToCloud: no fbCfg');return;}
+  if(_syncing){console.log('writeToCloud: already syncing, queuing');_pendingWrite=true;return;}
   _syncing=true;syncDot('syncing');
+  console.log('writeToCloud: sending to Firebase...');
   try{
     S._deviceId=_deviceId;
     const data=JSON.parse(JSON.stringify(S));
@@ -441,11 +463,14 @@ async function forceLoadFromCloud(){
     }
     if(remote.lastUpdate>(S.lastUpdate||'')){
       const wasEmpty=!S.batches||!S.batches.length;
+      // Preserve local machine UI state (running, modal) but take cloud data
       S=remote;
       localStorage.setItem(SK,JSON.stringify(S));
       renderMachineBar();renderAll();syncDot('ok');
-      toast(wasEmpty?'☁ Daten geladen ✓':'☁ Aktualisiert');
-    } else syncDot('ok');
+      toast(wasEmpty?'☁ Daten geladen ✓':'☁ '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' aktualisiert');
+    } else {
+      syncDot('ok');
+    }
   }catch(e){
     console.error('Load:',e);syncDot('error');
   }
@@ -739,11 +764,26 @@ function renderKPIs(m){
 
 /* ── TAB SWITCH ── */
 function swTab(name,el){
-  activeTab=name;
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  el.classList.add('active');
-  const m=activeMachine();if(m)renderTab(name,m);
+  try{
+    activeTab=name;
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    el.classList.add('active');
+    const m=activeMachine();
+    if(m)renderTab(name,m);
+    else renderAll();
+  }catch(e){
+    console.error('swTab error:',e);
+    document.getElementById('tc').innerHTML=
+      '<div style="padding:2rem;color:red">Fehler: '+e.message+'</div>';
+  }
 }
+
+// Also attach via addEventListener after DOM load for iOS compatibility
+document.addEventListener('DOMContentLoaded',function(){
+  document.getElementById('tab-heute').addEventListener('click',function(){swTab('heute',this);});
+  document.getElementById('tab-woche').addEventListener('click',function(){swTab('woche',this);});
+  document.getElementById('tab-alle').addEventListener('click',function(){swTab('alle',this);});
+});
 function renderTab(n,m){
   if(n==='heute')renderHeute(m);
   else if(n==='woche')renderWoche(m);
@@ -1377,6 +1417,9 @@ function clearFirebaseConfig(){
 /* ── INIT ── */
 dailyCleanup();
 
+// Init Firebase FIRST so fbCfg is set before any save() calls
+initFirebase(_cfgToUse);
+
 if(!S.machines.length){
   // Create default first machine with existing batch data
   S.batches=[
@@ -1435,9 +1478,16 @@ const _hardcodedCfg={
   betrieb:"ams2026"
 };
 
-// Saved config takes priority (if user changed betrieb code in UI)
+// Always use hardcoded config (has databaseURL), only take betrieb from saved
 const _savedFbCfg=loadFbCfg();
-const _cfgToUse=(_savedFbCfg&&_savedFbCfg.apiKey)?_savedFbCfg:_hardcodedCfg;
+// Merge: hardcoded base + saved betrieb code
+const _cfgToUse={
+  ..._hardcodedCfg,
+  betrieb:(_savedFbCfg&&_savedFbCfg.betrieb)?_savedFbCfg.betrieb:_hardcodedCfg.betrieb
+};
+// Save the merged config
+localStorage.setItem(FK,JSON.stringify(_cfgToUse));
+console.log('Config loaded, betrieb:',_cfgToUse.betrieb,'dbURL:',_cfgToUse.databaseURL);
 
 // Pre-fill setup form fields so user sees current config
 ['apiKey','authDomain','projectId','storageBucket','messagingSenderId','appId'].forEach(k=>{
@@ -1475,8 +1525,7 @@ async function testConnection(){
   }
 }
 
-// Init Firebase REST sync
-initFirebase(_cfgToUse);
+// Firebase already initialized above
 
 </script>
 </body>
