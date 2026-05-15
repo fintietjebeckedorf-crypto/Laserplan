@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Laserroboter Einsatzplan 2026</title>
+<title>Laserroboter Maschinenplanung 2026</title>
 <!-- PWA -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -212,7 +212,7 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
 
 <header>
   <div>
-    <h1>🌿 Laserroboter Einsatzplan 2026 <span class="sync-dot" id="syncDot" onclick="sbRead()" style="cursor:pointer" title="Tippen zum Aktualisieren"></span></h1>
+    <h1>🌿 Laserroboter Maschinenplanung 2026 <span class="sync-dot" id="syncDot" onclick="sbRead()" style="cursor:pointer" title="Tippen zum Aktualisieren"></span></h1>
     <div class="sub">Mehrmaschinen-Planung · Drag &amp; Drop · 7-Tage-Rhythmus</div>
   </div>
   <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
@@ -256,6 +256,18 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
       <label>Zielabstand nach Aussaat/Pflanzung (Tage)</label>
       <input type="number" id="mTarget" value="7" step="1" min="1" max="30">
       <span style="font-size:.68rem;color:var(--tm);margin-top:2px">Sätze werden als überfällig angezeigt wenn sie älter als dieser Wert sind.</span>
+    </div>
+    <div class="form-row">
+      <label>Kulturen dieser Maschine (leer = alle)</label>
+      <div id="mKulturenList" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;padding:6px;border:.5px solid var(--border);border-radius:7px;min-height:36px;"></div>
+    </div>
+    <div class="form-row">
+      <label>Manuelle Feldaufgaben (ohne Sätze) – optional</label>
+      <div id="mManualFields" style="border:.5px solid var(--border);border-radius:7px;padding:6px;margin-top:4px;">
+        <div style="font-size:.7rem;color:var(--tm);margin-bottom:5px">Felder auf denen diese Maschine arbeitet ohne feste Sätze – z.B. Schlag 0012 mit 3 ha</div>
+        <div id="mManualFieldList"></div>
+        <button type="button" onclick="addManualField()" style="font-size:.72rem;padding:3px 10px;border-radius:6px;border:.5px solid var(--border);background:var(--gl);color:var(--gd);cursor:pointer;margin-top:5px">+ Feld hinzufügen</button>
+      </div>
     </div>
     <div class="form-row">
       <label>Farbe</label>
@@ -353,6 +365,7 @@ function createMachine(name,colorIdx,cap){
     colorLight:MCL[colorIdx%MCL.length],
     cap:cap||4.4,
     targetDays:7,
+    kulturen:[], // empty = alle Kulturen
     running:null,comp:{},notes:{},weekPlan:{}
   };
   S.machines.push(m);
@@ -407,7 +420,7 @@ function parseXlsx(data){
       const sch=cSch>=0?String(r[cSch]).trim().replace(/^'/,''):'';
       const id=`${k}__${sn2}__${localDateStr(sow)}`;
       out.push({id,kultur:k,satz:sn2,flaeche:Math.round(fl*100)/100,
-        sowing:localDateStr(sow),schlag:sch,pending:sn2>=minS,nacht:NACHT.includes(k)});
+        sowing:localDateStr(sow),schlag:sch,pending:true,nacht:NACHT.includes(k)});
     }
   });
   return out;
@@ -468,8 +481,9 @@ function status(b,m){
 
 function getOpen(m){
   const batches=Array.isArray(S.batches)?S.batches:Object.values(S.batches||{});
+  const mk=m.kulturen&&m.kulturen.length?m.kulturen:null; // null = alle
   return batches
-    .filter(b=>b&&b.pending&&!(m.comp||{})[b.id]?.done)
+    .filter(b=>b&&b.pending&&!(m.comp||{})[b.id]?.done&&(!mk||mk.includes(b.kultur)))
     .sort((a,b)=>new Date(a.sowing)-new Date(b.sowing));
 }
 
@@ -506,6 +520,25 @@ function openMachineModal(mid){
   document.getElementById('mName').value=m?m.name:`Roboter ${S.machines.length+1}`;
   document.getElementById('mCap').value=m?m.cap:4.4;
   document.getElementById('mTarget').value=m?(m.targetDays||7):7;
+  // Fill kulturen checkboxes
+  const allKulturen=[...new Set(S.batches.map(b=>b.kultur))].sort();
+  const mKulturen=m?(m.kulturen||[]):[];
+  // Load manual fields
+  const mfList=document.getElementById('mManualFieldList');
+  mfList.innerHTML='';
+  const existingFields=m?(m.manualFields||[]):[];
+  existingFields.forEach(f=>addManualField(f.schlag,f.ha));
+
+  const kList=document.getElementById('mKulturenList');
+  if(allKulturen.length){
+    kList.innerHTML=allKulturen.map(k=>`
+      <label style="display:inline-flex;align-items:center;gap:4px;font-size:.75rem;padding:2px 8px;border-radius:20px;border:1px solid var(--border);cursor:pointer;background:${mKulturen.length===0||mKulturen.includes(k)?'var(--gl)':'var(--bg)'};color:${mKulturen.length===0||mKulturen.includes(k)?'var(--gd)':'var(--tm)'}">
+        <input type="checkbox" value="${k}" ${mKulturen.length===0||mKulturen.includes(k)?'checked':''} style="accent-color:var(--gm)">
+        ${k.replace(/^\d+\s*/,'')}
+      </label>`).join('');
+  } else {
+    kList.innerHTML='<span style="font-size:.73rem;color:var(--tm)">Erst Kulturliste laden</span>';
+  }
   document.getElementById('modalDel').style.display=mid?'inline-flex':'none';
   selectedColor=m?m.colorIdx:S.machines.length%MC.length;
   // Color swatches
@@ -523,15 +556,20 @@ function pickColor(i){
 function saveModal(){
   const name=document.getElementById('mName').value.trim()||'Roboter';
   const cap=parseFloat(document.getElementById('mCap').value)||4.4;
+  const tgt=parseInt(document.getElementById('mTarget').value)||7;
+  const checked=Array.from(document.querySelectorAll('#mKulturenList input:checked')).map(i=>i.value);
+  const allK=[...new Set(S.batches.map(b=>b.kultur))];
+  const selKult=checked.length===allK.length?[]:checked;
   if(modalMid){
     const m=getMachine(modalMid);
-    const tgt=parseInt(document.getElementById('mTarget').value)||7;
     m.name=name;m.cap=cap;m.targetDays=tgt;m.colorIdx=selectedColor;
     m.color=MC[selectedColor%MC.length];m.colorLight=MCL[selectedColor%MCL.length];
+    m.kulturen=selKult;
+    m.manualFields=getManualFields();
   } else {
-    const tgt2=parseInt(document.getElementById('mTarget').value)||7;
-    const nm=createMachine(name,selectedColor,cap);
-    nm.targetDays=tgt2;
+    const nm=createMachine(name,selectedColor,cap,tgt);
+    nm.kulturen=selKult;
+    nm.manualFields=getManualFields();
   }
   closeModal();save();renderMachineBar();renderAll();
 }
@@ -542,6 +580,37 @@ function deleteMachine(){
   S.machines=S.machines.filter(m=>m.id!==modalMid);
   if(S.activeMachineId===modalMid)S.activeMachineId=S.machines[0]?.id||null;
   closeModal();save();renderMachineBar();renderAll();
+}
+
+function addManualField(schlag='', ha=''){
+  const list=document.getElementById('mManualFieldList');
+  const div=document.createElement('div');
+  div.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:5px;';
+  div.innerHTML=`
+    <input type="text" placeholder="Schlag (z.B. 0012)" value="${schlag}" style="width:130px;font-size:.75rem;border:.5px solid var(--border);border-radius:6px;padding:3px 6px;" class="mf-schlag">
+    <input type="number" placeholder="ha" value="${ha}" step="0.1" min="0" style="width:70px;font-size:.75rem;border:.5px solid var(--border);border-radius:6px;padding:3px 6px;" class="mf-ha">
+    <button type="button" onclick="this.parentNode.remove()" style="font-size:.75rem;padding:2px 7px;border-radius:5px;border:.5px solid var(--border);background:var(--rl);color:var(--red);cursor:pointer">✕</button>`;
+  list.appendChild(div);
+}
+
+function getManualFields(){
+  return Array.from(document.querySelectorAll('#mManualFieldList > div')).map(div=>({
+    schlag: div.querySelector('.mf-schlag').value.trim(),
+    ha: parseFloat(div.querySelector('.mf-ha').value)||0
+  })).filter(f=>f.schlag&&f.ha>0);
+}
+
+function addManualFieldInline(mid){
+  const m=getMachine(mid);if(!m)return;
+  const schlag=prompt('Schlag-Nummer (z.B. 0012):');
+  if(!schlag)return;
+  const ha=parseFloat(prompt('Fläche in ha (z.B. 3.5):'));
+  if(!ha||ha<=0)return;
+  if(!m.manualFields)m.manualFields=[];
+  m.manualFields.push({schlag,ha});
+  save();
+  renderWoche(m);
+  toast(`Schlag ${schlag} (${ha} ha) hinzugefügt`);
 }
 
 function closeModal(){document.getElementById('modalBg').style.display='none';}
@@ -755,7 +824,23 @@ function renderHeute(m){
     othersHtml+='</div>';
   }
 
-  document.getElementById('tc').innerHTML=`<div class="today-grid">${nowHtml}${nHtml}</div>${othersHtml}`;
+  // Manual fields section
+let manualHtml='';
+const mf=m.manualFields&&m.manualFields.length?m.manualFields:[];
+if(mf.length){
+  manualHtml=`<div style="margin-top:.85rem;">
+    <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--tm);margin-bottom:.4rem">Manuelle Feldaufgaben (${m.name})</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;">
+    ${mf.map(f=>`<div style="background:var(--card);border:.5px solid var(--border);border-radius:8px;padding:.5rem .85rem;min-width:130px;">
+      <div style="font-weight:700;font-size:.82rem">Schlag ${f.schlag}</div>
+      <div style="font-size:.75rem;color:var(--tm)">${f.ha.toFixed(2)} ha · ca. ${(f.ha/0.2).toFixed(0)} h</div>
+      <button class="btn run" style="margin-top:5px;font-size:.68rem;background:${m.colorLight||'var(--gl)'};color:${m.color};border-color:${m.color}" 
+        onclick="toast('Schlag ${f.schlag} – ${f.ha.toFixed(2)} ha einplanen')">📍 Einplanen</button>
+    </div>`).join('')}
+    </div>
+  </div>`;
+}
+document.getElementById('tc').innerHTML=`<div class="today-grid">${nowHtml}${nHtml}</div>${othersHtml}${manualHtml}`;
 }
 
 /* ── TAB 2: WOCHENPLAN (Drag & Drop) ── */
@@ -766,6 +851,15 @@ function getWeekPlan(m){
     const manIds=(m.weekPlan||{})[dStr]||[];
     const items=[];let tHa=0,prevS=null,sw2=0;
     manIds.forEach(id=>{
+      if(id.startsWith('manual_')){
+        const fi=parseInt(id.slice(7));
+        const f=(m.manualFields||[])[fi];
+        if(!f)return;
+        items.push({id,kultur:'Manuell',satz:0,flaeche:f.ha,
+          sowing:localDateStr(TODAY),schlag:f.schlag,
+          pending:true,nacht:false,isManual:true,fieldSwitch:false});
+        tHa=Math.round((tHa+f.ha)*100)/100;return;
+      }
       const b=S.batches.find(x=>x.id===id);
       if(!b||(m.comp||{})[id]?.done)return;
       const isw=prevS&&prevS!==b.schlag;if(isw)sw2++;
@@ -881,13 +975,14 @@ function renderWoche(m){
       const age=dDiff(it.sowing,TODAY);
       const isw=prevS&&prevS!==it.schlag;
       html+=`${isw?`<div style="font-size:.57rem;color:var(--amber);font-weight:700;margin:1px 2px">↕→${it.schlag}</div>`:''}
-      <div class="wcard ${it.nacht?'nacht-c':'day-c'} ${age>(m.targetDays||7)?'overdue-c':''}"
+      <div class="wcard ${it.isManual?'':''}${it.nacht?'nacht-c':'day-c'} ${!it.isManual&&age>(m.targetDays||7)?'overdue-c':''}"
+        style="${it.isManual?'background:var(--bl);color:var(--blue);border-color:var(--blue);':''}"
         data-id="${it.id}" data-mid="${m.id}"
         onmousedown="ddDown(event,'${it.id}','${m.id}')"
         ontouchstart="ddDown(event,'${it.id}','${m.id}')">
         <span class="drag-handle">⠿</span>
-        <div class="wk">${it.kultur.replace(/^\d+\s*/,'')} S${it.satz}${it.schlag?' ·'+it.schlag:''}</div>
-        <div class="wd">${it.flaeche.toFixed(2)} ha${it.nacht?' 🌙':''}${age>(m.targetDays||7)?` <b style="color:${it.nacht?'#F09595':'var(--red)'}">`+(age-(m.targetDays||7))+`d ⚠</b>`:''}</div>
+        <div class="wk">${it.isManual?'📍 Schlag '+it.schlag:it.kultur.replace(/^\d+\s*/,'')+' S'+it.satz+(it.schlag?' ·'+it.schlag:'')}</div>
+        <div class="wd">${it.flaeche.toFixed(2)} ha${it.nacht?' 🌙':''}${!it.isManual&&age>(m.targetDays||7)?` <b style="color:${it.nacht?'#F09595':'var(--red)'}">`+(age-(m.targetDays||7))+`d ⚠</b>`:''}</div>
       </div>`;
       prevS=it.schlag;
     });
@@ -929,6 +1024,30 @@ function renderWoche(m){
       </div>`;
     });
   }
+  // Manual fields in pool
+  const mf=(m.manualFields||[]);
+  if(mf.length){
+    html+=`<div class="pool-section" style="margin-top:.5rem;">
+      <div class="pool-title" style="margin-bottom:.4rem">📍 Manuelle Feldaufgaben (ohne Satz)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;">
+        ${mf.map((f,i)=>`<div class="pcard" style="background:var(--bl);color:var(--blue);border-color:var(--blue);"
+          data-id="manual_${i}" data-mid="${m.id}"
+          onmousedown="ddDown(event,'manual_${i}','${m.id}')"
+          ontouchstart="ddDown(event,'manual_${i}','${m.id}')">
+          <div class="pk">📍 Schlag ${f.schlag}</div>
+          <div class="pd">${f.ha.toFixed(2)} ha · ca. ${(f.ha/0.2).toFixed(0)}h</div>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  // Button to add new manual field inline
+  html+=`<div style="margin-top:.5rem;">
+    <button class="btn" onclick="addManualFieldInline('${m.id}')" style="font-size:.72rem;">
+      + Manuelle Feldaufgabe hinzufügen
+    </button>
+  </div>`;
+
   html+=`</div></div>`;
   document.getElementById('tc').innerHTML=html;
 }
@@ -1082,11 +1201,15 @@ function renderAlle(m){
   const kulturen=[...new Set(S.batches.map(b=>b.kultur))].sort();
 
   // Which batches are in which machine's weekPlan
+  // Build assignMap with machine AND day info
   const assignMap={};
   S.machines.forEach(mx=>{
-    Object.values(mx.weekPlan).flat().forEach(id=>{
-      if(!assignMap[id])assignMap[id]=[];
-      if(!assignMap[id].find(x=>x.id===mx.id))assignMap[id].push(mx);
+    Object.entries(mx.weekPlan||{}).forEach(([dayStr,ids])=>{
+      (ids||[]).forEach(id=>{
+        if(!assignMap[id])assignMap[id]=[];
+        if(!assignMap[id].find(x=>x.id===mx.id&&x.day===dayStr))
+          assignMap[id].push({...mx,day:dayStr});
+      });
     });
   });
 
@@ -1134,7 +1257,13 @@ function renderAlle(m){
       <td>${fmt(b.sowing)}</td>
       <td style="text-align:center;font-weight:${age>=0?'600':'400'};color:${age>7?'var(--red)':age>=0?'var(--amber)':'var(--tm)'}">${age>=0?age:'–'}</td>
       <td>${badge}</td>
-      <td>${assigned.map(mx=>`<span style="display:inline-block;padding:1px 6px;border-radius:10px;font-size:.62rem;font-weight:700;background:${mx.colorLight||'#eee'};color:${mx.color};margin:1px">${mx.name}</span>`).join('')||'–'}</td>
+      <td>${assigned.length?assigned.map(mx=>{
+        const dayDate=new Date(mx.day);
+        const dayLbl=mx.day?dayDate.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'}):'';
+        return `<span style="display:inline-block;padding:1px 7px;border-radius:10px;font-size:.62rem;font-weight:700;background:${mx.colorLight||'#eee'};color:${mx.color};margin:1px;white-space:nowrap">
+          ${mx.name}${dayLbl?' · '+dayLbl:''}
+        </span>`;
+      }).join(''):'–'}</td>
       <td><input type="date" value="${c.doneDate||''}" onchange="setDone('${m.id}','${b.id}',this.value)"></td>
       <td><input type="text" placeholder="Notiz..." value="${(m.notes||{})[b.id]||''}" onchange="setNote('${m.id}','${b.id}',this.value)"></td>
       <td style="display:flex;gap:3px;">
