@@ -396,18 +396,19 @@ document.getElementById('fileInput').addEventListener('change',e=>{
   const rd=new FileReader();
   rd.onload=ev=>{
     try{
+      if(typeof XLSX==='undefined'){toast('XLSX Bibliothek nicht geladen - Seite neu laden',true);return;}
       const nb=parseXlsx(new Uint8Array(ev.target.result));
-      if(!nb.length){toast('Keine Sätze gefunden',true);return;}
+      if(!nb||!nb.length){toast('Keine Sätze gefunden',true);return;}
       const newIds=new Set(nb.map(b=>b.id));
       S.batches=nb;
       // clean up each machine's weekPlan and comp
-      S.machines.forEach(m=>{
-        Object.keys(m.weekPlan).forEach(d=>{
+      (S.machines||[]).forEach(m=>{
+        Object.keys(m.weekPlan||{}).forEach(d=>{
           m.weekPlan[d]=(m.weekPlan[d]||[]).filter(id=>newIds.has(id));
           if(!m.weekPlan[d].length)delete m.weekPlan[d];
         });
-        Object.keys(m.comp).forEach(id=>{if(!newIds.has(id))delete m.comp[id];});
-        Object.keys(m.notes).forEach(id=>{if(!newIds.has(id))delete m.notes[id];});
+        Object.keys(m.comp||{}).forEach(id=>{if(!newIds.has(id))delete m.comp[id];});
+        Object.keys(m.notes||{}).forEach(id=>{if(!newIds.has(id))delete m.notes[id];});
         if(m.running&&!newIds.has(m.running))m.running=null;
       });
       save(); // this now calls sbWrite() automatically
