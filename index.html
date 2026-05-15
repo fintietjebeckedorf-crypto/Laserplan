@@ -216,7 +216,7 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
     <div class="sub">Mehrmaschinen-Planung · Drag &amp; Drop · 7-Tage-Rhythmus</div>
   </div>
   <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
-    <button class="hbtn" onclick="document.getElementById('fileInput').click();console.log('File dialog opened')">↑ Kulturliste laden</button>
+    <button class="hbtn" onclick="document.getElementById('fileInput').click()">↑ Kulturliste laden</button>
     <input type="file" id="fileInput" accept=".xlsx,.xls">
     <button class="hbtn" onclick="exportCSV()">↓ Export</button>
     <button class="hbtn" onclick="sbRead()">↻ Sync</button>
@@ -1160,9 +1160,10 @@ function setRun(mid,id){const m=getMachine(mid);if(!m)return;m.running=id;if(!(m
 function setHa(mid,id,val){const m=getMachine(mid);if(!m)return;if(!(m.comp||{})[id])(m.comp||{})[id]={};(m.comp||{})[id].haLasered=Math.max(0,parseFloat(val)||0);save();renderKPIs(m);if(activeTab==='heute')renderHeute(m);}
 function doneMark(mid,id){
   const m=getMachine(mid);if(!m)return;
-  if(!(m.comp||{})[id])(m.comp||{})[id]={};
+  if(!m.comp)m.comp={};
+  if(!m.comp[id])m.comp[id]={};
   const b=S.batches.find(x=>x.id===id);
-  (m.comp||{})[id].done=true;(m.comp||{})[id].doneDate=Tstr;(m.comp||{})[id].haLasered=b?.flaeche||0;
+  m.comp[id].done=true;m.comp[id].doneDate=Tstr;m.comp[id].haLasered=b?.flaeche||0;
   if(m.running===id){const next=getOpen(m).find(x=>x.id!==id);m.running=next?next.id:null;}
   Object.keys(m.weekPlan||{}).forEach(d=>{(m.weekPlan||{})[d]=((m.weekPlan||{})[d]||[]).filter(x=>x!==id);if(!(m.weekPlan||{})[d].length)delete (m.weekPlan||{})[d];});
   save();renderAll();toast('Fertig ✓');
@@ -1228,7 +1229,6 @@ async function sbWrite(){
       headers:{...SB_HDR,'Prefer':'resolution=merge-duplicates,return=minimal'},
       body:JSON.stringify(payload)
     });
-    console.log('sbWrite HTTP:',r.status,'size:',JSON.stringify(payload).length);
     syncDot(r.ok||r.status===201||r.status===204?'ok':'error');
     if(!r.ok&&r.status!==201&&r.status!==204){
       const txt=await r.text();
@@ -1242,25 +1242,20 @@ async function sbRead(){
     const r=await fetch(SB_URL+'/rest/v1/laserplan?id=eq.main&select=data,updated_at',{
       headers:SB_HDR
     });
-    console.log('sbRead HTTP:',r.status);
     if(!r.ok){syncDot('ok');return;}
     const rows=await r.json();
-    console.log('sbRead rows:',rows.length,'hasData:',!!(rows[0]&&rows[0].data));
     if(!rows||!rows.length||!rows[0].data){
-      console.log('sbRead: no data in DB, pushing local');
-      if(S.batches&&S.batches.length)sbWrite();
+        if(S.batches&&S.batches.length)sbWrite();
       syncDot('ok');return;
     }
     const remote=rows[0].data;
-    console.log('sbRead remote.lastUpdate:',remote.lastUpdate,'local:',S.lastUpdate||'none');
     if(remote.lastUpdate&&remote.lastUpdate>(S.lastUpdate||'')){
       S=fixArrays(remote);
       localStorage.setItem(SK,JSON.stringify(S));
       renderMachineBar();renderAll();syncDot('ok');
       toast('☁ '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' aktualisiert');
     } else {
-      console.log('sbRead: local is up to date');
-      syncDot('ok');
+        syncDot('ok');
     }
   }catch(e){syncDot('error');console.error('sbRead:',e);}
 }
