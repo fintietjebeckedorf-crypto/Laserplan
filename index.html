@@ -341,6 +341,25 @@ function loadState(){
 }
 let S=loadState();
 
+// Firebase REST API returns arrays as objects {0:x,1:y} – fix them back
+function fixArrays(obj){
+  if(obj===null||obj===undefined)return obj;
+  if(typeof obj!=='object')return obj;
+  // Check if it looks like an array (all numeric keys)
+  if(!Array.isArray(obj)){
+    const keys=Object.keys(obj);
+    if(keys.length>0&&keys.every(k=>/^\d+$/.test(k))){
+      return keys.map(k=>fixArrays(obj[k]));
+    }
+    // Recurse into object values
+    const out={};
+    keys.forEach(k=>{out[k]=fixArrays(obj[k]);});
+    return out;
+  }
+  return obj.map(fixArrays);
+}
+
+
 function save(){
   S.lastOpened=Tstr;
   S.lastUpdate=new Date().toISOString();
@@ -477,8 +496,9 @@ async function forceLoadFromCloud(){
     }
     if(remote.lastUpdate>(S.lastUpdate||'')){
       const wasEmpty=!S.batches||!S.batches.length;
-      // Preserve local machine UI state (running, modal) but take cloud data
       S=remote;
+      // Firebase turns arrays into objects – convert back
+      S=fixArrays(S);
       localStorage.setItem(SK,JSON.stringify(S));
       renderMachineBar();renderAll();syncDot('ok');
       toast(wasEmpty?'☁ Daten geladen ✓':'☁ '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' aktualisiert');
