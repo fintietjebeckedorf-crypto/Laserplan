@@ -187,7 +187,7 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
     <button class="hbtn" onclick="document.getElementById('fileInput').click()">↑ Kulturliste laden</button>
     <input type="file" id="fileInput" accept=".xlsx,.xls">
     <button class="hbtn" onclick="exportCSV()">↓ Export</button>
-    <button class="hbtn" onclick="showSyncSetup()">☁ Sync</button>
+    <button class="hbtn" onclick="sbRead()">↻ Sync</button>
     <button class="hbtn danger" onclick="hardReset()">Reset</button>
   </div>
 </header>
@@ -1145,11 +1145,16 @@ function toast(msg,err){
 }
 
 
-/* ══ GOOGLE SHEETS SYNC ═══════════════════════════════════════
-   Uses Google Apps Script Web App as middleware
-   No SDK needed – just fetch()
+/* ══ SUPABASE SYNC ════════════════════════════════════════════
+   REST API – kein SDK, kein CORS-Problem
 ═══════════════════════════════════════════════════════════════ */
-let GS_URL='https://script.google.com/macros/s/AKfycbyoK09-Z-Gb9Sp81oWrheZgH3hcIpxWTNBg8CasAe7R8imrn5kBUNizeNCT5sk3MDM/exec'; // Google Apps Script URL
+const SB_URL='https://lcxvknjhbxhgfkdfwloo.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxjeHZrbmpoYnhoZ2ZrZGZ3bG9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MzQxMzYsImV4cCI6MjA5NDQxMDEzNn0.XS2bKx-_96pEC5aY0lcMzRVwH_ce5xRM6bX86ZbxnaA';
+const SB_HDR={
+  'apikey':SB_KEY,
+  'Authorization':'Bearer '+SB_KEY,
+  'Content-Type':'application/json'
+};
 
 function syncDot(state){
   const el=document.getElementById('syncDot');if(!el)return;
@@ -1157,78 +1162,52 @@ function syncDot(state){
   el.title={ok:'Sync ✓',syncing:'Speichert...',error:'Fehler',none:'Kein Sync'}[state]||'';
 }
 
-async function gsWrite(){
-  if(!GS_URL)return;
+async function sbWrite(){
   syncDot('syncing');
   try{
-    const r=await fetch(GS_URL,{
-      method:'POST',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body:JSON.stringify(S),
-      redirect:'follow'
+    const r=await fetch(SB_URL+'/rest/v1/laserplan?id=eq.main',{
+      method:'PATCH',
+      headers:{...SB_HDR,'Prefer':'return=minimal'},
+      body:JSON.stringify({data:S,updated_at:new Date().toISOString()})
     });
-    syncDot('ok');
-  }catch(e){syncDot('error');console.error('Sync write:',e);}
+    syncDot(r.ok||r.status===204?'ok':'error');
+    if(!r.ok&&r.status!==204)console.error('sbWrite:',r.status,await r.text());
+  }catch(e){syncDot('error');console.error('sbWrite:',e);}
 }
 
-async function gsRead(){
-  if(!GS_URL)return;
-  syncDot('syncing');
+async function sbRead(){
   try{
-    const r=await fetch(GS_URL);
+    const r=await fetch(SB_URL+'/rest/v1/laserplan?id=eq.main&select=data,updated_at',{
+      headers:SB_HDR
+    });
     if(!r.ok){syncDot('ok');return;}
-    const remote=await r.json();
-    if(!remote||!remote.lastUpdate){syncDot('ok');return;}
-    if(remote.lastUpdate>(S.lastUpdate||'')){
+    const rows=await r.json();
+    if(!rows||!rows.length||!rows[0].data){
+      if(S.batches&&S.batches.length)sbWrite();
+      syncDot('ok');return;
+    }
+    const remote=rows[0].data;
+    if(remote.lastUpdate&&remote.lastUpdate>(S.lastUpdate||'')){
       S=remote;
       localStorage.setItem(SK,JSON.stringify(S));
-      renderMachineBar();renderAll();
-      toast('☁ Aktualisiert');
-    }
-    syncDot('ok');
-  }catch(e){syncDot('error');console.error('Sync read:',e);}
+      renderMachineBar();renderAll();syncDot('ok');
+      toast('☁ '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' aktualisiert');
+    } else syncDot('ok');
+  }catch(e){syncDot('error');console.error('sbRead:',e);}
 }
 
-// Override save to also sync
+// Override save
 const _origSave=save;
 function save(){
   _origSave();
-  if(GS_URL)gsWrite();
+  sbWrite();
 }
 
-// Poll every 10 seconds
-setInterval(()=>{if(GS_URL)gsRead();},10000);
-
-// Load GS_URL from localStorage
-
-function showSyncSetup(){
-  const modal=document.getElementById('syncModal');
-  document.getElementById('gsUrlInput').value=GS_URL||'';
-  modal.style.display='flex';
-}
-function saveGsUrl(){
-  const url=document.getElementById('gsUrlInput').value.trim();
-  GS_URL=url;
-  localStorage.setItem('lrplan_gs_url',url);
-  document.getElementById('syncModal').style.display='none';
-  if(url){gsRead();toast('Sync gespeichert ✓');}
-}
-async function testGs(){
-  const url=document.getElementById('gsUrlInput').value.trim();
-  if(!url){alert('Bitte URL eingeben');return;}
-  const st=document.getElementById('syncStatus');
-  st.style.display='block';st.textContent='⏳ Teste...';st.style.color='#888';
-  try{
-    const r=await fetch(url);
-    if(r.ok){st.textContent='✓ Verbindung OK!';st.style.color='green';}
-    else{st.textContent='✗ HTTP '+r.status;st.style.color='red';}
-  }catch(e){st.textContent='✗ '+e.message;st.style.color='red';}
-}
+// Poll every 8 seconds
+setInterval(()=>sbRead(),8000);
 
 function initSync(){
-  const cfg=localStorage.getItem('lrplan_gs_url');
-  if(cfg){GS_URL=cfg;gsRead();syncDot('ok');}
-  else syncDot('none');
+  sbRead();
 }
 
 
