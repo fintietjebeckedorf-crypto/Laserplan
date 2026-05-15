@@ -1417,9 +1417,6 @@ function clearFirebaseConfig(){
 /* ── INIT ── */
 dailyCleanup();
 
-// Init Firebase FIRST so fbCfg is set before any save() calls
-initFirebase(_cfgToUse);
-
 if(!S.machines.length){
   // Create default first machine with existing batch data
   S.batches=[
@@ -1525,7 +1522,8 @@ async function testConnection(){
   }
 }
 
-// Firebase already initialized above
+// ── AUTO-INIT Firebase beim Start ──────────────────────────────
+initFirebase(_cfgToUse);
 
 </script>
 </body>
