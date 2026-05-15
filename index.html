@@ -161,6 +161,10 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
 .color-swatch{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform .1s;}
 .color-swatch.sel{border-color:#fff;box-shadow:0 0 0 2px #172015;transform:scale(1.15);}
 
+.sync-dot{width:9px;height:9px;border-radius:50%;background:#9FE1CB;display:inline-block;margin-left:5px;transition:background .3s;vertical-align:middle;}
+.sync-dot.syncing{background:var(--am);animation:pulse .8s infinite;}
+.sync-dot.error{background:var(--red);}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 #sm{position:fixed;bottom:1rem;right:1rem;background:#172015;color:#9FE1CB;padding:.4rem .85rem;border-radius:8px;font-size:.75rem;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9999;}
 #sm.show{opacity:1;}
 50%{opacity:.3}}
@@ -184,7 +188,7 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
     <div class="sub">Mehrmaschinen-Planung · Drag &amp; Drop · 7-Tage-Rhythmus</div>
   </div>
   <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
-    <button class="hbtn" onclick="document.getElementById('fileInput').click()">↑ Kulturliste laden</button>
+    <button class="hbtn" onclick="document.getElementById('fileInput').click();console.log('File dialog opened')">↑ Kulturliste laden</button>
     <input type="file" id="fileInput" accept=".xlsx,.xls">
     <button class="hbtn" onclick="exportCSV()">↓ Export</button>
     <button class="hbtn" onclick="sbRead()">↻ Sync</button>
@@ -382,7 +386,8 @@ document.getElementById('fileInput').addEventListener('change',e=>{
         Object.keys(m.notes).forEach(id=>{if(!newIds.has(id))delete m.notes[id];});
         if(m.running&&!newIds.has(m.running))m.running=null;
       });
-      save();renderAll();
+      save(); // this now calls sbWrite() automatically
+      renderAll();
       toast(`${nb.length} Sätze geladen ✓`);
     }catch(err){toast('Fehler: '+err.message,true);}
     e.target.value='';
@@ -1261,7 +1266,6 @@ if(!S.machines.length){
 }
 initSync();
 
-// Firebase config – direkt eingebaut
 </script>
 
 <!-- Sync Setup -->
