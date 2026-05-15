@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23172015'/><text y='68' x='50' text-anchor='middle' font-size='55'>🌿</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-
+<!-- Firebase -->
 <style>
 :root{
   --green:#3B6D11;--gl:#EAF3DE;--gm:#639922;--gd:#27500A;
@@ -161,27 +161,9 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
 .color-swatch{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform .1s;}
 .color-swatch.sel{border-color:#fff;box-shadow:0 0 0 2px #172015;transform:scale(1.15);}
 
-/* Error Console */
-#errConsole{position:fixed;bottom:0;left:0;right:0;max-height:40vh;overflow-y:auto;
-  background:#1a1a1a;color:#f0f0f0;font-family:monospace;font-size:.72rem;
-  border-top:2px solid #444;z-index:9998;display:none;padding:.5rem;}
-#errConsole .err-line{padding:2px 6px;border-bottom:.5px solid #333;display:flex;gap:8px;align-items:flex-start;}
-#errConsole .err-line.error{color:#ff6b6b;}
-#errConsole .err-line.warn{color:#ffd93d;}
-#errConsole .err-line.log{color:#6bcb77;}
-#errConsole .err-time{color:#888;flex-shrink:0;font-size:.68rem;}
-#errConsole .err-txt{flex:1;word-break:break-all;white-space:pre-wrap;}
-#errBar{position:fixed;bottom:0;right:80px;background:#1a1a1a;color:#f0f0f0;
-  font-size:.72rem;padding:3px 10px;border-radius:8px 8px 0 0;cursor:pointer;z-index:9999;
-  border:1px solid #444;border-bottom:none;}
-#errBar .err-count{background:#ff6b6b;color:#fff;border-radius:10px;padding:0 5px;margin-left:4px;font-size:.65rem;}
 #sm{position:fixed;bottom:1rem;right:1rem;background:#172015;color:#9FE1CB;padding:.4rem .85rem;border-radius:8px;font-size:.75rem;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9999;}
 #sm.show{opacity:1;}
-/* Sync indicator */
-.sync-dot{width:8px;height:8px;border-radius:50%;background:#9FE1CB;display:inline-block;margin-left:5px;transition:background .3s;}
-.sync-dot.syncing{background:#EF9F27;animation:pulse .8s infinite;}
-.sync-dot.error{background:#E24B4A;}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+50%{opacity:.3}}
 /* Setup modal */
 .setup-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:center;justify-content:center;}
 .setup-box{background:var(--card);border-radius:var(--r);padding:1.5rem;width:min(540px,95vw);max-height:90vh;overflow-y:auto;}
@@ -198,15 +180,14 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
 
 <header>
   <div>
-    <h1>🌿 Laserroboter Einsatzplan 2026 <span class="sync-dot" id="syncDot" title="Tippen zum Sync" onclick="forceLoadFromCloud();writeToCloud();" style="cursor:pointer"></span></h1>
+    <h1>🌿 Laserroboter Einsatzplan 2026 <span class="sync-dot" id="syncDot" onclick="gsRead()" style="cursor:pointer" title="Tippen zum Aktualisieren"></span></h1>
     <div class="sub">Mehrmaschinen-Planung · Drag &amp; Drop · 7-Tage-Rhythmus</div>
   </div>
   <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
     <button class="hbtn" onclick="document.getElementById('fileInput').click()">↑ Kulturliste laden</button>
     <input type="file" id="fileInput" accept=".xlsx,.xls">
     <button class="hbtn" onclick="exportCSV()">↓ Export</button>
-    <button class="hbtn" onclick="showSetup()">☁ Firebase</button>
-    <button class="hbtn" onclick="testConnection()" id="testBtn">🔌 Test</button>
+    <button class="hbtn" onclick="showSyncSetup()">☁ Sync</button>
     <button class="hbtn danger" onclick="hardReset()">Reset</button>
   </div>
 </header>
@@ -215,10 +196,10 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
 <div class="mbar" id="mbar"></div>
 
 <!-- Tabs -->
-<div class="tabs" id="tabBar">
-  <div class="tab active" id="tab-heute" onclick="swTab('heute',this)">📍 Heute</div>
-  <div class="tab" id="tab-woche" onclick="swTab('woche',this)">📅 Wochenplan</div>
-  <div class="tab" id="tab-alle" onclick="swTab('alle',this)">📋 Alle Sätze</div>
+<div class="tabs">
+  <div class="tab active" onclick="swTab('heute',this)">📍 Heute</div>
+  <div class="tab" onclick="swTab('woche',this)">📅 Wochenplan</div>
+  <div class="tab" onclick="swTab('alle',this)">📋 Alle Sätze</div>
 </div>
 
 <div class="main">
@@ -256,75 +237,13 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
   </div>
 </div>
 
-<!-- Firebase Setup Overlay -->
-<div id="setupOverlay" class="setup-overlay" style="display:none">
-  <div class="setup-box">
-    <h2>☁️ Firebase einrichten – einmalig, 5 Minuten</h2>
-    <div class="step">
-      <div class="step-num">1</div>
-      <div class="step-txt">Gehe zu <b>console.firebase.google.com</b> → „Projekt erstellen" → Namen eingeben (z.B. „laserplan") → Weiter → Weiter → Projekt erstellen</div>
-    </div>
-    <div class="step">
-      <div class="step-num">2</div>
-      <div class="step-txt">Im Projekt: links auf <b>Firestore Database</b> → „Datenbank erstellen" → „Im Testmodus starten" → Region <b>eur3 (europe-west)</b> → Fertig</div>
-    </div>
-    <div class="step">
-      <div class="step-num">3</div>
-      <div class="step-txt">Oben links auf das Zahnrad → <b>Projekteinstellungen</b> → Scrolle zu „Deine Apps" → Klick auf <b>&lt;/&gt;</b> (Web-App) → App-Namen eingeben → „App registrieren"</div>
-    </div>
-    <div class="step">
-      <div class="step-num">4</div>
-      <div class="step-txt">Du siehst jetzt ein Code-Snippet mit <code>firebaseConfig</code>. Kopiere die Werte in die Felder unten:</div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem;">
-      <div>
-        <div style="font-size:.7rem;color:var(--tm);font-weight:600;margin-bottom:2px">apiKey</div>
-        <input class="cfg-input" id="fb_apiKey" placeholder="AIza...">
-      </div>
-      <div>
-        <div style="font-size:.7rem;color:var(--tm);font-weight:600;margin-bottom:2px">authDomain</div>
-        <input class="cfg-input" id="fb_authDomain" placeholder="xxx.firebaseapp.com">
-      </div>
-      <div>
-        <div style="font-size:.7rem;color:var(--tm);font-weight:600;margin-bottom:2px">projectId</div>
-        <input class="cfg-input" id="fb_projectId" placeholder="laserplan-xxx">
-      </div>
-      <div>
-        <div style="font-size:.7rem;color:var(--tm);font-weight:600;margin-bottom:2px">storageBucket</div>
-        <input class="cfg-input" id="fb_storageBucket" placeholder="xxx.appspot.com">
-      </div>
-      <div>
-        <div style="font-size:.7rem;color:var(--tm);font-weight:600;margin-bottom:2px">messagingSenderId</div>
-        <input class="cfg-input" id="fb_messagingSenderId" placeholder="123456789">
-      </div>
-      <div>
-        <div style="font-size:.7rem;color:var(--tm);font-weight:600;margin-bottom:2px">appId</div>
-        <input class="cfg-input" id="fb_appId" placeholder="1:123:web:abc">
-      </div>
-    </div>
-    <div class="step">
-      <div class="step-num">5</div>
-      <div class="step-txt">Gib einen <b>Betrieb-Code</b> ein (beliebiges Passwort – alle Geräte mit demselben Code teilen die gleichen Daten):</div>
-    </div>
-    <input class="cfg-input" id="fb_betrieb" placeholder="z.B. ams2026" style="margin-bottom:1rem">
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn p" onclick="saveFirebaseConfig()">Verbinden &amp; speichern</button>
-      <button class="btn" onclick="document.getElementById('setupOverlay').style.display='none'">Abbrechen</button>
-      <button class="btn dr" onclick="clearFirebaseConfig()" style="margin-left:auto">Verbindung trennen</button>
-    </div>
-    <div id="setupStatus" style="margin-top:.75rem;font-size:.76rem;color:var(--green);display:none"></div>
-  </div>
-</div>
-
 <script>
-
 /* ═══════════════════════════════════════════════════════════════
    CONSTANTS & STATE
 ═══════════════════════════════════════════════════════════════ */
 const SK='lrplan_v10';
 const FK='lrplan_firebase_cfg'; // separate localStorage key for Firebase config
 
-// ── DATE & STATE ────────────────────────────────────────────────
 function localDateStr(d){
   const x=new Date(d);
   return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');
@@ -335,72 +254,20 @@ const DN=['So','Mo','Di','Mi','Do','Fr','Sa'];
 const MC=['#2E75B6','#639922','#BA7517','#7B4EA0','#0F6E56','#C0392B','#1A7F9C'];
 const MCL=['#E6F1FB','#EAF3DE','#FAEEDA','#F0E8F8','#E1F5EE','#FDEAEA','#E0F4FA'];
 
-// Firebase REST API returns arrays as objects {0:x,1:y} – convert back
-function fixArrays(obj){
-  if(obj===null||obj===undefined)return obj;
-  if(typeof obj!=='object'||Array.isArray(obj))return Array.isArray(obj)?obj.map(fixArrays):obj;
-  const keys=Object.keys(obj);
-  if(keys.length>0&&keys.every(k=>/^\d+$/.test(k))){
-    return Array.from({length:Math.max(...keys.map(Number))+1},(_,i)=>fixArrays(obj[i]));
-  }
-  const out={};
-  keys.forEach(k=>{out[k]=fixArrays(obj[k]);});
-  return out;
-}
-
 function loadState(){
-  try{
-    const s=localStorage.getItem(SK);
-    if(s){
-      const parsed=JSON.parse(s);
-      return fixArrays(parsed);
-    }
-  }catch(e){}
+  try{const s=localStorage.getItem(SK);if(s)return JSON.parse(s);}catch(e){}
   return{batches:[],machines:[],activeMachineId:null,lastOpened:null,lastUpdate:null};
 }
-let S=loadState();
-
-
 function save(){
   S.lastOpened=Tstr;
   S.lastUpdate=new Date().toISOString();
   localStorage.setItem(SK,JSON.stringify(S));
-  if(fbCfg){
-    writeToCloud();
-  } else {
-    console.warn('save(): fbCfg not set yet – not syncing');
-  }
 }
+let S=loadState();
 
 let activeTab='heute';
 let wKulturHide=new Set();
-
-function swTab(name,el){
-  try{
-    activeTab=name;
-    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-    el.classList.add('active');
-    const m=activeMachine();
-    if(m)renderTab(name,m);
-    else renderAll();
-  }catch(e){
-    console.error('swTab error:',e);
-    document.getElementById('tc').innerHTML=
-      '<div style="padding:2rem;color:red">Fehler: '+e.message+'</div>';
-  }
-}
-
-// Also attach via addEventListener after DOM load for iOS compatibility
-document.addEventListener('DOMContentLoaded',function(){
-  document.getElementById('tab-heute').addEventListener('click',function(){swTab('heute',this);});
-  document.getElementById('tab-woche').addEventListener('click',function(){swTab('woche',this);});
-  document.getElementById('tab-alle').addEventListener('click',function(){swTab('alle',this);});
-});
-function renderTab(n,m){
-  if(n==='heute')renderHeute(m);
-  else if(n==='woche')renderWoche(m);
-  else renderAlle(m);
-}
+let modalMid=null,selectedColor=0;
 
 
 /* ═══════════════════════════════════════════════════════════════
@@ -410,112 +277,6 @@ function renderTab(n,m){
    - Writes debounced 1.5s after last change
    - Real-time listener updates all open tabs/devices instantly
 ═══════════════════════════════════════════════════════════════ */
-/* ══ FIREBASE REALTIME DATABASE – pure REST, no SDK ══════════════
-   Uses fetch() against the REST API – works everywhere, no CDN needed
-   URL: https://laserplan-ams-default-rtdb.firebaseio.com/betriebe/{betrieb}.json
-═══════════════════════════════════════════════════════════════ */
-let fbCfg=null;
-let _syncing=false,_pendingWrite=false;
-let _deviceId=Math.random().toString(36).slice(2);
-let _pollTimer=null;
-
-const FB_URL='https://laserplan-ams-default-rtdb.firebaseio.com';
-
-function loadFbCfg(){try{const c=localStorage.getItem(FK);return c?JSON.parse(c):null;}catch(e){return null;}}
-
-function syncDot(state){
-  const el=document.getElementById('syncDot');if(!el)return;
-  el.className='sync-dot'+(state==='syncing'?' syncing':state==='error'?' error':'');
-  el.title={ok:'Cloud-Sync ✓',syncing:'Speichert...',error:'Fehler',none:'Kein Sync'}[state]||'';
-}
-
-function initFirebase(cfg){
-  fbCfg=cfg;
-  syncDot('ok');
-  // Load data immediately
-  forceLoadFromCloud();
-  // Poll every 10 seconds for changes from other devices
-  startPolling();
-  return true;
-}
-
-function startPolling(){
-  if(_pollTimer)clearInterval(_pollTimer);
-  _pollTimer=setInterval(()=>pollFromCloud(),5000);
-}
-
-async function pollFromCloud(){
-  if(!fbCfg){return;}
-  if(_syncing)return;
-  try{
-    const url=`${FB_URL}/betriebe/${fbCfg.betrieb}/lastUpdate.json`;
-    const r=await fetch(url);
-    if(!r.ok)return;
-    const remoteTs=await r.json();
-    if(remoteTs&&remoteTs>(S.lastUpdate||'')){
-      await forceLoadFromCloud();
-    }
-  }catch(e){/* silent */}
-}
-
-async function writeToCloud(){
-  if(!fbCfg){console.warn('writeToCloud: no fbCfg');return;}
-  if(_syncing){console.log('writeToCloud: already syncing, queuing');_pendingWrite=true;return;}
-  _syncing=true;syncDot('syncing');
-  console.log('writeToCloud: sending to Firebase...');
-  try{
-    S._deviceId=_deviceId;
-    const data=JSON.parse(JSON.stringify(S));
-    const url=`${FB_URL}/betriebe/${fbCfg.betrieb}.json`;
-    const r=await fetch(url,{
-      method:'PUT',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(data)
-    });
-    if(!r.ok)throw new Error('HTTP '+r.status);
-    syncDot('ok');
-  }catch(e){
-    console.error('Write:',e);syncDot('error');
-    toast('Sync-Fehler: '+e.message,true);
-  }finally{
-    _syncing=false;
-    if(_pendingWrite){_pendingWrite=false;writeToCloud();}
-  }
-}
-
-async function forceLoadFromCloud(){
-  if(!fbCfg)return;
-  syncDot('syncing');
-  try{
-    const url=`${FB_URL}/betriebe/${fbCfg.betrieb}.json`;
-    const r=await fetch(url);
-    if(!r.ok){syncDot('ok');return;}
-    const remote=await r.json();
-    if(!remote||!remote.lastUpdate){
-      if(S.batches&&S.batches.length)writeToCloud();
-      syncDot('ok');return;
-    }
-    if(remote.lastUpdate>(S.lastUpdate||'')){
-      const wasEmpty=!S.batches||!S.batches.length;
-      S=remote;
-      // Firebase turns arrays into objects – convert back
-      S=fixArrays(S);
-      localStorage.setItem(SK,JSON.stringify(S));
-      renderMachineBar();renderAll();syncDot('ok');
-      toast(wasEmpty?'☁ Daten geladen ✓':'☁ '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' aktualisiert');
-    } else {
-      syncDot('ok');
-    }
-  }catch(e){
-    console.error('Load:',e);syncDot('error');
-  }
-}
-
-function scheduleSyncToCloud(){
-  if(!fbCfg)return;
-  if(_syncing){_pendingWrite=true;return;}
-  writeToCloud();
-}
 
 function xlD(v){
   const n=parseFloat(v);if(isNaN(n)||n<40000||n>65000)return null;
@@ -799,26 +560,11 @@ function renderKPIs(m){
 
 /* ── TAB SWITCH ── */
 function swTab(name,el){
-  try{
-    activeTab=name;
-    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-    el.classList.add('active');
-    const m=activeMachine();
-    if(m)renderTab(name,m);
-    else renderAll();
-  }catch(e){
-    console.error('swTab error:',e);
-    document.getElementById('tc').innerHTML=
-      '<div style="padding:2rem;color:red">Fehler: '+e.message+'</div>';
-  }
+  activeTab=name;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  const m=activeMachine();if(m)renderTab(name,m);
 }
-
-// Also attach via addEventListener after DOM load for iOS compatibility
-document.addEventListener('DOMContentLoaded',function(){
-  document.getElementById('tab-heute').addEventListener('click',function(){swTab('heute',this);});
-  document.getElementById('tab-woche').addEventListener('click',function(){swTab('woche',this);});
-  document.getElementById('tab-alle').addEventListener('click',function(){swTab('alle',this);});
-});
 function renderTab(n,m){
   if(n==='heute')renderHeute(m);
   else if(n==='woche')renderWoche(m);
@@ -1398,163 +1144,95 @@ function toast(msg,err){
   el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2600);
 }
 
-/* ── FIREBASE SETUP FUNCTIONS ── */
-function showSetup(){
-  const cfg=loadFbCfg()||{};
-  ['apiKey','authDomain','projectId','storageBucket','messagingSenderId','appId'].forEach(k=>{
-    const el=document.getElementById('fb_'+k);
-    if(el)el.value=cfg[k]||'';
-  });
-  document.getElementById('fb_betrieb').value=cfg.betrieb||'';
-  document.getElementById('setupOverlay').style.display='flex';
+
+/* ══ GOOGLE SHEETS SYNC ═══════════════════════════════════════
+   Uses Google Apps Script Web App as middleware
+   No SDK needed – just fetch()
+═══════════════════════════════════════════════════════════════ */
+let GS_URL='https://script.google.com/macros/s/AKfycbyoK09-Z-Gb9Sp81oWrheZgH3hcIpxWTNBg8CasAe7R8imrn5kBUNizeNCT5sk3MDM/exec'; // Google Apps Script URL
+
+function syncDot(state){
+  const el=document.getElementById('syncDot');if(!el)return;
+  el.className='sync-dot'+(state==='syncing'?' syncing':state==='error'?' error':'');
+  el.title={ok:'Sync ✓',syncing:'Speichert...',error:'Fehler',none:'Kein Sync'}[state]||'';
 }
 
-function saveFirebaseConfig(){
-  const cfg={
-    apiKey:document.getElementById('fb_apiKey').value.trim(),
-    authDomain:document.getElementById('fb_authDomain').value.trim(),
-    projectId:document.getElementById('fb_projectId').value.trim(),
-    storageBucket:document.getElementById('fb_storageBucket').value.trim(),
-    messagingSenderId:document.getElementById('fb_messagingSenderId').value.trim(),
-    appId:document.getElementById('fb_appId').value.trim(),
-    betrieb:document.getElementById('fb_betrieb').value.trim()||'default'
-  };
-  if(!cfg.apiKey||!cfg.projectId){
-    toast('Bitte apiKey und projectId eingeben',true);return;
-  }
-  localStorage.setItem(FK,JSON.stringify(cfg));
-  const ok=initFirebase(cfg);
-  const st=document.getElementById('setupStatus');
-  if(ok){
-    st.style.display='block';
-    st.style.color='var(--green)';
-    st.textContent='✓ Verbunden! Daten werden jetzt automatisch synchronisiert.';
-    // Push current local data to cloud immediately
-    syncToCloud().then(()=>{
-      setTimeout(()=>{document.getElementById('setupOverlay').style.display='none';},1500);
+async function gsWrite(){
+  if(!GS_URL)return;
+  syncDot('syncing');
+  try{
+    const r=await fetch(GS_URL,{
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify(S),
+      redirect:'follow'
     });
-  }else{
-    st.style.display='block';st.style.color='var(--red)';
-    st.textContent='✗ Verbindung fehlgeschlagen. Bitte Konfiguration prüfen.';
-  }
+    syncDot('ok');
+  }catch(e){syncDot('error');console.error('Sync write:',e);}
 }
 
-function clearFirebaseConfig(){
-  if(!confirm('Firebase-Verbindung trennen? Daten bleiben lokal erhalten.'))return;
-  if(unsubscribe){unsubscribe();unsubscribe=null;}
-  db=null;fbCfg=null;
-  localStorage.removeItem(FK);
-  syncDot('none');
-  document.getElementById('setupOverlay').style.display='none';
-  toast('Firebase-Verbindung getrennt');
+async function gsRead(){
+  if(!GS_URL)return;
+  syncDot('syncing');
+  try{
+    const r=await fetch(GS_URL);
+    if(!r.ok){syncDot('ok');return;}
+    const remote=await r.json();
+    if(!remote||!remote.lastUpdate){syncDot('ok');return;}
+    if(remote.lastUpdate>(S.lastUpdate||'')){
+      S=remote;
+      localStorage.setItem(SK,JSON.stringify(S));
+      renderMachineBar();renderAll();
+      toast('☁ Aktualisiert');
+    }
+    syncDot('ok');
+  }catch(e){syncDot('error');console.error('Sync read:',e);}
 }
+
+// Override save to also sync
+const _origSave=save;
+function save(){
+  _origSave();
+  if(GS_URL)gsWrite();
+}
+
+// Poll every 10 seconds
+setInterval(()=>{if(GS_URL)gsRead();},10000);
+
+// Load GS_URL from localStorage
+
+function showSyncSetup(){
+  const modal=document.getElementById('syncModal');
+  document.getElementById('gsUrlInput').value=GS_URL||'';
+  modal.style.display='flex';
+}
+function saveGsUrl(){
+  const url=document.getElementById('gsUrlInput').value.trim();
+  GS_URL=url;
+  localStorage.setItem('lrplan_gs_url',url);
+  document.getElementById('syncModal').style.display='none';
+  if(url){gsRead();toast('Sync gespeichert ✓');}
+}
+async function testGs(){
+  const url=document.getElementById('gsUrlInput').value.trim();
+  if(!url){alert('Bitte URL eingeben');return;}
+  const st=document.getElementById('syncStatus');
+  st.style.display='block';st.textContent='⏳ Teste...';st.style.color='#888';
+  try{
+    const r=await fetch(url);
+    if(r.ok){st.textContent='✓ Verbindung OK!';st.style.color='green';}
+    else{st.textContent='✗ HTTP '+r.status;st.style.color='red';}
+  }catch(e){st.textContent='✗ '+e.message;st.style.color='red';}
+}
+
+function initSync(){
+  const cfg=localStorage.getItem('lrplan_gs_url');
+  if(cfg){GS_URL=cfg;gsRead();syncDot('ok');}
+  else syncDot('none');
+}
+
 
 /* ── INIT ── */
-const _hardcodedCfg={
-  apiKey:"AIzaSyAuvcSHIIxHJnMnPf2zT2J6i4ekvKrbNJ4",
-  authDomain:"laserplan-ams.firebaseapp.com",
-  projectId:"laserplan-ams",
-  storageBucket:"laserplan-ams.firebasestorage.app",
-  messagingSenderId:"465166466053",
-  appId:"1:465166466053:web:9e78d4483b8031130d306c",
-  databaseURL:"https://laserplan-ams-default-rtdb.firebaseio.com",
-  betrieb:"ams2026"
-};
-
-// Always use hardcoded config (has databaseURL), only take betrieb from saved
-const _savedFbCfg=loadFbCfg();
-// Merge: hardcoded base + saved betrieb code
-const _cfgToUse={
-  ..._hardcodedCfg,
-  betrieb:(_savedFbCfg&&_savedFbCfg.betrieb)?_savedFbCfg.betrieb:_hardcodedCfg.betrieb
-};
-// Save the merged config
-localStorage.setItem(FK,JSON.stringify(_cfgToUse));
-console.log('Config loaded, betrieb:',_cfgToUse.betrieb,'dbURL:',_cfgToUse.databaseURL);
-
-// Pre-fill setup form fields so user sees current config
-['apiKey','authDomain','projectId','storageBucket','messagingSenderId','appId'].forEach(k=>{
-  const el=document.getElementById('fb_'+k);
-  if(el&&!el.value)el.value=_cfgToUse[k]||'';
-});
-const betEl=document.getElementById('fb_betrieb');
-if(betEl&&!betEl.value)betEl.value=_cfgToUse.betrieb||'ams2026';
-
-// Save to localStorage so it persists
-localStorage.setItem(FK,JSON.stringify(_cfgToUse));
-
-// Init Firebase – wait for SDK to be ready
-async function testConnection(){
-  const btn=document.getElementById('testBtn');
-  btn.textContent='⏳ Teste...';
-  try{
-    const url='https://laserplan-ams-default-rtdb.firebaseio.com/test.json';
-    const r=await fetch(url,{method:'PUT',headers:{'Content-Type':'application/json'},body:'"ok"'});
-    const data=await r.json();
-    if(r.ok){
-      btn.textContent='✓ Verbindung OK!';
-      btn.style.color='#9FE1CB';
-      setTimeout(()=>{btn.textContent='🔌 Test';btn.style.color='';},3000);
-      toast('☁ Verbindung zur Datenbank OK! Sync läuft.');
-      initFirebase(_cfgToUse);
-    } else {
-      btn.textContent='✗ HTTP '+r.status;
-      toast('Fehler HTTP '+r.status+': '+JSON.stringify(data),true);
-    }
-  }catch(e){
-    btn.textContent='✗ '+e.message.slice(0,20);
-    toast('Verbindungsfehler: '+e.message,true);
-    console.error(e);
-  }
-}
-
-// ── ERROR CONSOLE ────────────────────────────────────────────
-let errCount=0;
-
-function addErrLine(type, msg){
-  errCount++;
-  const d=document.getElementById('errLines');
-  if(!d)return;
-  const now=new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  const div=document.createElement('div');
-  div.className='err-line '+type;
-  div.innerHTML=`<span class="err-time">${now}</span><span class="err-txt">[${type.toUpperCase()}] ${String(msg).replace(/</g,'&lt;')}</span>`;
-  d.appendChild(div);
-  d.scrollTop=d.scrollHeight;
-  updateErrBar();
-}
-
-function updateErrBar(){
-  const bar=document.getElementById('errBar');
-  const cnt=document.getElementById('errCount');
-  if(bar){bar.style.display='block';}
-  if(cnt){cnt.textContent=errCount;}
-}
-
-function toggleConsole(){
-  const c=document.getElementById('errConsole');
-  const t=document.getElementById('errToggleTxt');
-  const open=c.style.display==='none';
-  c.style.display=open?'block':'none';
-  if(t)t.textContent=open?'▼ schließen':'▲ öffnen';
-}
-
-// Intercept all console methods
-const _origError=console.error.bind(console);
-const _origWarn=console.warn.bind(console);
-const _origLog=console.log.bind(console);
-
-console.error=function(...a){_origError(...a);addErrLine('error',a.map(x=>typeof x==='object'?JSON.stringify(x):x).join(' '));};
-console.warn=function(...a){_origWarn(...a);addErrLine('warn',a.map(x=>typeof x==='object'?JSON.stringify(x):x).join(' '));};
-console.log=function(...a){_origLog(...a);addErrLine('log',a.map(x=>typeof x==='object'?JSON.stringify(x):x).join(' '));};
-
-// Catch uncaught errors
-window.addEventListener('error',e=>addErrLine('error','Uncaught: '+e.message+' ('+e.filename?.split('/').pop()+':'+e.lineno+')'));
-window.addEventListener('unhandledrejection',e=>addErrLine('error','Promise: '+e.reason));
-
-// ── AUTO-INIT Firebase beim Start ──────────────────────────────
-initFirebase(_cfgToUse);
-
 dailyCleanup();
 
 if(!S.machines.length){
@@ -1602,10 +1280,30 @@ if(!S.machines.length){
   renderMachineBar();
   renderAll();
 }
+initSync();
 
 // Firebase config – direkt eingebaut
-
-
 </script>
+
+<!-- Sync Setup -->
+<div id="syncModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:none;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:10px;padding:1.5rem;width:min(500px,95vw);max-height:90vh;overflow-y:auto;">
+    <h2 style="font-size:.95rem;font-weight:700;margin-bottom:1rem">☁ Sync einrichten</h2>
+    <p style="font-size:.8rem;color:#888;margin-bottom:1rem">
+      Für die Synchronisation zwischen PC und iPad wird ein Google Apps Script benötigt.
+      Schick mir den untenstehenden Code und ich erkläre den nächsten Schritt.
+    </p>
+    <div style="font-size:.75rem;margin-bottom:.75rem;font-weight:600">Google Apps Script Web App URL:</div>
+    <input id="gsUrlInput" type="text" placeholder="https://script.google.com/macros/s/..." 
+      style="width:100%;font-size:.78rem;border:1px solid #ddd;border-radius:6px;padding:6px 9px;margin-bottom:1rem">
+    <div style="display:flex;gap:8px;">
+      <button onclick="saveGsUrl()" style="padding:6px 16px;border-radius:6px;background:#172015;color:#9FE1CB;border:none;cursor:pointer;font-size:.8rem">Speichern</button>
+      <button onclick="document.getElementById('syncModal').style.display='none'" style="padding:6px 16px;border-radius:6px;background:#f1f1f1;border:none;cursor:pointer;font-size:.8rem">Abbrechen</button>
+      <button onclick="testGs()" style="padding:6px 16px;border-radius:6px;background:#f1f1f1;border:none;cursor:pointer;font-size:.8rem">🔌 Testen</button>
+    </div>
+    <div id="syncStatus" style="margin-top:.75rem;font-size:.75rem;display:none"></div>
+  </div>
+</div>
+
 </body>
 </html>
