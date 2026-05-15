@@ -212,7 +212,7 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
 
 <header>
   <div>
-    <h1>🌿 Laserroboter Einsatzplan 2026 <span class="sync-dot" id="syncDot" onclick="gsRead()" style="cursor:pointer" title="Tippen zum Aktualisieren"></span></h1>
+    <h1>🌿 Laserroboter Einsatzplan 2026 <span class="sync-dot" id="syncDot" onclick="sbRead()" style="cursor:pointer" title="Tippen zum Aktualisieren"></span></h1>
     <div class="sub">Mehrmaschinen-Planung · Drag &amp; Drop · 7-Tage-Rhythmus</div>
   </div>
   <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
@@ -459,15 +459,16 @@ function dailyCleanup(){
 /* ── STATUS & OPEN BATCHES ── */
 function status(b,m){
   if(!b.pending)return'skip';
-  if(m.comp[b.id]?.done)return'done';
+  if((m.comp||{})[b.id]?.done)return'done';
   const age=dDiff(b.sowing,TODAY);
   const tgt=m.targetDays||7;
   if(age>tgt)return'overdue';if(age>=0)return'due';return'future';
 }
 
 function getOpen(m){
-  return S.batches
-    .filter(b=>b.pending&&!m.comp[b.id]?.done)
+  const batches=Array.isArray(S.batches)?S.batches:Object.values(S.batches||{});
+  return batches
+    .filter(b=>b&&b.pending&&!(m.comp||{})[b.id]?.done)
     .sort((a,b)=>new Date(a.sowing)-new Date(b.sowing));
 }
 
@@ -560,7 +561,7 @@ function renderAll(){
 }
 
 function renderKPIs(m){
-  const pending=S.batches.filter(b=>b.pending);
+  const pending=(Array.isArray(S.batches)?S.batches:Object.values(S.batches||{})).filter(b=>b.pending);
   const done=pending.filter(b=>m.comp[b.id]?.done);
   const overdue=pending.filter(b=>status(b,m)==='overdue');
   const totalHa=pending.reduce((s,b)=>s+b.flaeche,0);
