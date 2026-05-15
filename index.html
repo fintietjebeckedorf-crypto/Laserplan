@@ -1217,14 +1217,23 @@ function syncDot(state){
 async function sbWrite(){
   syncDot('syncing');
   try{
-    const r=await fetch(SB_URL+'/rest/v1/laserplan?id=eq.main',{
-      method:'PATCH',
-      headers:{...SB_HDR,'Prefer':'return=minimal'},
-      body:JSON.stringify({data:S,updated_at:new Date().toISOString()})
+    // Use UPSERT to ensure row always gets created/updated
+    const payload={
+      id:'main',
+      data:JSON.parse(JSON.stringify(S)), // clean copy
+      updated_at:new Date().toISOString()
+    };
+    const r=await fetch(SB_URL+'/rest/v1/laserplan',{
+      method:'POST',
+      headers:{...SB_HDR,'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify(payload)
     });
-    console.log('sbWrite HTTP:',r.status);
-    syncDot(r.ok||r.status===204?'ok':'error');
-    if(!r.ok&&r.status!==204)console.error('sbWrite:',r.status,await r.text());
+    console.log('sbWrite HTTP:',r.status,'size:',JSON.stringify(payload).length);
+    syncDot(r.ok||r.status===201||r.status===204?'ok':'error');
+    if(!r.ok&&r.status!==201&&r.status!==204){
+      const txt=await r.text();
+      console.error('sbWrite error:',r.status,txt);
+    }
   }catch(e){syncDot('error');console.error('sbWrite:',e);}
 }
 
