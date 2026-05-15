@@ -425,11 +425,11 @@ document.getElementById('fileInput').addEventListener('change',e=>{
       // clean up each machine's weekPlan and comp
       (S.machines||[]).forEach(m=>{
         Object.keys(m.weekPlan||{}).forEach(d=>{
-          m.weekPlan[d]=(m.weekPlan[d]||[]).filter(id=>newIds.has(id));
-          if(!m.weekPlan[d].length)delete m.weekPlan[d];
+          (m.weekPlan||{})[d]=((m.weekPlan||{})[d]||[]).filter(id=>newIds.has(id));
+          if(!(m.weekPlan||{})[d].length)delete (m.weekPlan||{})[d];
         });
-        Object.keys(m.comp||{}).forEach(id=>{if(!newIds.has(id))delete m.comp[id];});
-        Object.keys(m.notes||{}).forEach(id=>{if(!newIds.has(id))delete m.notes[id];});
+        Object.keys(m.comp||{}).forEach(id=>{if(!newIds.has(id))delete (m.comp||{})[id];});
+        Object.keys(m.notes||{}).forEach(id=>{if(!newIds.has(id))delete (m.notes||{})[id];});
         if(m.running&&!newIds.has(m.running))m.running=null;
       });
       save(); // this now calls sbWrite() automatically
@@ -447,10 +447,10 @@ function dailyCleanup(){
   S.machines.forEach(m=>{
     const doneIds=new Set(Object.entries(m.comp).filter(([,v])=>v.done).map(([k])=>k));
     const validIds=new Set(S.batches.map(b=>b.id));
-    Object.keys(m.weekPlan).forEach(d=>{
-      if(d<Tstr){delete m.weekPlan[d];return;}
-      m.weekPlan[d]=(m.weekPlan[d]||[]).filter(id=>validIds.has(id)&&!doneIds.has(id));
-      if(!m.weekPlan[d].length)delete m.weekPlan[d];
+    Object.keys(m.weekPlan||{}).forEach(d=>{
+      if(d<Tstr){delete (m.weekPlan||{})[d];return;}
+      (m.weekPlan||{})[d]=((m.weekPlan||{})[d]||[]).filter(id=>validIds.has(id)&&!doneIds.has(id));
+      if(!(m.weekPlan||{})[d].length)delete (m.weekPlan||{})[d];
     });
   });
   save();
@@ -562,7 +562,7 @@ function renderAll(){
 
 function renderKPIs(m){
   const pending=(Array.isArray(S.batches)?S.batches:Object.values(S.batches||{})).filter(b=>b.pending);
-  const done=pending.filter(b=>m.comp[b.id]?.done);
+  const done=pending.filter(b=>(m.comp||{})[b.id]?.done);
   const overdue=pending.filter(b=>status(b,m)==='overdue');
   const totalHa=pending.reduce((s,b)=>s+b.flaeche,0);
   const doneHa=done.reduce((s,b)=>s+b.flaeche,0);
@@ -580,7 +580,7 @@ function renderKPIs(m){
       if(!allAssigned[id].includes(mx.id))allAssigned[id].push(mx.id);
     });
   });
-  const myPlanned=Object.values(m.weekPlan).flat().length;
+  const myPlanned=Object.values(m.weekPlan||{}).flat().length;
 
   document.getElementById('kpiRow').innerHTML=`
     <div class="kpi ${overdueHa>0?'r':'g'}">
@@ -662,7 +662,7 @@ function renderHeute(m){
       </div></div>`;
   } else {
     // Pick first from today's plan, or fall back to oldest open
-    const todayFirstId=(m.weekPlan[ds(TODAY)]||[]).find(id=>!m.comp[id]?.done);
+    const todayFirstId=((m.weekPlan||{})[ds(TODAY)]||[]).find(id=>!(m.comp||{})[id]?.done);
     const first=todayFirstId?S.batches.find(b=>b.id===todayFirstId):open[0];
     if(first){
       const age=dDiff(first.sowing,TODAY);
@@ -682,16 +682,16 @@ function renderHeute(m){
   // Next up list – from TODAY's week plan in user-defined order
   // Fall back to age-sorted open list if nothing is planned for today
   const todayDs=ds(TODAY);
-  const todayPlanIds=(m.weekPlan[todayDs]||[]).filter(id=>!m.comp[id]?.done&&id!==m.running);
+  const todayPlanIds=((m.weekPlan||{})[todayDs]||[]).filter(id=>!(m.comp||{})[id]?.done&&id!==m.running);
   const todayPlanBatches=todayPlanIds.map(id=>S.batches.find(b=>b.id===id)).filter(Boolean);
 
   // Also show tomorrow if today's plan is short
   const tomorrowDs=ds(addDays(TODAY,1));
-  const tomorrowIds=(m.weekPlan[tomorrowDs]||[]).filter(id=>!m.comp[id]?.done&&id!==m.running);
+  const tomorrowIds=((m.weekPlan||{})[tomorrowDs]||[]).filter(id=>!(m.comp||{})[id]?.done&&id!==m.running);
   const tomorrowBatches=tomorrowIds.map(id=>S.batches.find(b=>b.id===id)).filter(Boolean);
 
   // Fallback: if nothing in week plan, show age-sorted open list
-  const hasWeekPlan=Object.keys(m.weekPlan).length>0;
+  const hasWeekPlan=Object.keys(m.weekPlan||{}).length>0;
   const nextList=hasWeekPlan
     ?[...todayPlanBatches,...tomorrowBatches].slice(0,9)
     :open.filter(b=>b.id!==m.running).slice(0,9);
@@ -762,11 +762,11 @@ function getWeekPlan(m){
   const plan=[];
   for(let d=0;d<7;d++){
     const dt=addDays(TODAY,d);const dStr=ds(dt);
-    const manIds=m.weekPlan[dStr]||[];
+    const manIds=(m.weekPlan||{})[dStr]||[];
     const items=[];let tHa=0,prevS=null,sw2=0;
     manIds.forEach(id=>{
       const b=S.batches.find(x=>x.id===id);
-      if(!b||m.comp[id]?.done)return;
+      if(!b||(m.comp||{})[id]?.done)return;
       const isw=prevS&&prevS!==b.schlag;if(isw)sw2++;
       items.push({...b,fieldSwitch:isw});
       tHa=Math.round((tHa+b.flaeche)*100)/100;prevS=b.schlag;
@@ -785,7 +785,7 @@ function toggleKultur(k){
 function renderWoche(m){
   const plan=getWeekPlan(m);
   const allOpen=getOpen(m);
-  const scheduledIds=new Set(Object.values(m.weekPlan).flat());
+  const scheduledIds=new Set(Object.values(m.weekPlan||{}).flat());
   const pool=allOpen.filter(b=>!scheduledIds.has(b.id));
   const kulturen=[...new Set(allOpen.map(b=>b.kultur))].sort();
 
@@ -1110,7 +1110,7 @@ function renderAlle(m){
   </tr></thead><tbody>`;
 
   batches.forEach((b,idx)=>{
-    const st=status(b,m);const c=m.comp[b.id]||{};
+    const st=status(b,m);const c=(m.comp||{})[b.id]||{};
     const isDone=!!c.done;const isRun=m.running===b.id;
     const age=dDiff(b.sowing,TODAY);
     tHa+=b.flaeche;if(isDone)dHa+=b.flaeche;
@@ -1135,7 +1135,7 @@ function renderAlle(m){
       <td>${badge}</td>
       <td>${assigned.map(mx=>`<span style="display:inline-block;padding:1px 6px;border-radius:10px;font-size:.62rem;font-weight:700;background:${mx.colorLight||'#eee'};color:${mx.color};margin:1px">${mx.name}</span>`).join('')||'–'}</td>
       <td><input type="date" value="${c.doneDate||''}" onchange="setDone('${m.id}','${b.id}',this.value)"></td>
-      <td><input type="text" placeholder="Notiz..." value="${m.notes[b.id]||''}" onchange="setNote('${m.id}','${b.id}',this.value)"></td>
+      <td><input type="text" placeholder="Notiz..." value="${(m.notes||{})[b.id]||''}" onchange="setNote('${m.id}','${b.id}',this.value)"></td>
       <td style="display:flex;gap:3px;">
         ${isDone
           ?`<button class="btn dr" onclick="undoDone('${m.id}','${b.id}')">✕</button>`
@@ -1156,28 +1156,28 @@ function renderAlle(m){
 }
 
 /* ── ACTIONS ── */
-function setRun(mid,id){const m=getMachine(mid);if(!m)return;m.running=id;if(!m.comp[id])m.comp[id]={};save();renderAll();toast('Gestartet');}
-function setHa(mid,id,val){const m=getMachine(mid);if(!m)return;if(!m.comp[id])m.comp[id]={};m.comp[id].haLasered=Math.max(0,parseFloat(val)||0);save();renderKPIs(m);if(activeTab==='heute')renderHeute(m);}
+function setRun(mid,id){const m=getMachine(mid);if(!m)return;m.running=id;if(!(m.comp||{})[id])(m.comp||{})[id]={};save();renderAll();toast('Gestartet');}
+function setHa(mid,id,val){const m=getMachine(mid);if(!m)return;if(!(m.comp||{})[id])(m.comp||{})[id]={};(m.comp||{})[id].haLasered=Math.max(0,parseFloat(val)||0);save();renderKPIs(m);if(activeTab==='heute')renderHeute(m);}
 function doneMark(mid,id){
   const m=getMachine(mid);if(!m)return;
-  if(!m.comp[id])m.comp[id]={};
+  if(!(m.comp||{})[id])(m.comp||{})[id]={};
   const b=S.batches.find(x=>x.id===id);
-  m.comp[id].done=true;m.comp[id].doneDate=Tstr;m.comp[id].haLasered=b?.flaeche||0;
+  (m.comp||{})[id].done=true;(m.comp||{})[id].doneDate=Tstr;(m.comp||{})[id].haLasered=b?.flaeche||0;
   if(m.running===id){const next=getOpen(m).find(x=>x.id!==id);m.running=next?next.id:null;}
-  Object.keys(m.weekPlan).forEach(d=>{m.weekPlan[d]=(m.weekPlan[d]||[]).filter(x=>x!==id);if(!m.weekPlan[d].length)delete m.weekPlan[d];});
+  Object.keys(m.weekPlan||{}).forEach(d=>{(m.weekPlan||{})[d]=((m.weekPlan||{})[d]||[]).filter(x=>x!==id);if(!(m.weekPlan||{})[d].length)delete (m.weekPlan||{})[d];});
   save();renderAll();toast('Fertig ✓');
 }
-function setDone(mid,id,dv){const m=getMachine(mid);if(!m)return;if(!m.comp[id])m.comp[id]={};if(dv){m.comp[id].done=true;m.comp[id].doneDate=dv;}else{m.comp[id].done=false;m.comp[id].doneDate='';}save();renderAll();}
-function undoDone(mid,id){const m=getMachine(mid);if(!m)return;if(m.comp[id]){m.comp[id].done=false;m.comp[id].doneDate='';}save();renderAll();}
-function setNote(mid,id,v){const m=getMachine(mid);if(!m)return;m.notes[id]=v;save();}
+function setDone(mid,id,dv){const m=getMachine(mid);if(!m)return;if(!(m.comp||{})[id])(m.comp||{})[id]={};if(dv){(m.comp||{})[id].done=true;(m.comp||{})[id].doneDate=dv;}else{(m.comp||{})[id].done=false;(m.comp||{})[id].doneDate='';}save();renderAll();}
+function undoDone(mid,id){const m=getMachine(mid);if(!m)return;if((m.comp||{})[id]){(m.comp||{})[id].done=false;(m.comp||{})[id].doneDate='';}save();renderAll();}
+function setNote(mid,id,v){const m=getMachine(mid);if(!m)return;(m.notes||{})[id]=v;save();}
 function m_clearWeek(mid){const m=getMachine(mid);if(!m)return;m.weekPlan={};save();renderWoche(m);}
 
 function exportCSV(){
   const m=activeMachine();if(!m)return;
   const rows=[['Kultur','Satz','Schlag','ha','Pflanzung','Alter','Status','Fertig am','Notiz','Maschine']];
   S.batches.filter(b=>b.pending).forEach(b=>{
-    const c=m.comp[b.id]||{};const age=dDiff(b.sowing,TODAY);
-    rows.push([b.kultur,b.satz,b.schlag,b.flaeche,fmtL(b.sowing),age>=0?age:'',c.done?'Fertig':status(b,m),c.doneDate||'',m.notes[b.id]||'',m.name]);
+    const c=(m.comp||{})[b.id]||{};const age=dDiff(b.sowing,TODAY);
+    rows.push([b.kultur,b.satz,b.schlag,b.flaeche,fmtL(b.sowing),age>=0?age:'',c.done?'Fertig':status(b,m),c.doneDate||'',(m.notes||{})[b.id]||'',m.name]);
   });
   const csv=rows.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';')).join('\n');
   const a=document.createElement('a');
