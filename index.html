@@ -286,8 +286,24 @@ const DN=['So','Mo','Di','Mi','Do','Fr','Sa'];
 const MC=['#2E75B6','#639922','#BA7517','#7B4EA0','#0F6E56','#C0392B','#1A7F9C'];
 const MCL=['#E6F1FB','#EAF3DE','#FAEEDA','#F0E8F8','#E1F5EE','#FDEAEA','#E0F4FA'];
 
+// Supabase/JSON parsing turns arrays into objects – fix them back
+function fixArrays(obj){
+  if(obj===null||obj===undefined)return obj;
+  if(Array.isArray(obj))return obj.map(fixArrays);
+  if(typeof obj!=='object')return obj;
+  const keys=Object.keys(obj);
+  if(keys.length>0&&keys.every(k=>/^\d+$/.test(k))){
+    const arr=new Array(Math.max(...keys.map(Number))+1);
+    keys.forEach(k=>arr[parseInt(k)]=fixArrays(obj[k]));
+    return arr;
+  }
+  const out={};
+  keys.forEach(k=>{out[k]=fixArrays(obj[k]);});
+  return out;
+}
+
 function loadState(){
-  try{const s=localStorage.getItem(SK);if(s)return JSON.parse(s);}catch(e){}
+  try{const s=localStorage.getItem(SK);if(s)return fixArrays(JSON.parse(s));}catch(e){}
   return{batches:[],machines:[],activeMachineId:null,lastOpened:null,lastUpdate:null};
 }
 function save(){
@@ -1223,7 +1239,7 @@ async function sbRead(){
     }
     const remote=rows[0].data;
     if(remote.lastUpdate&&remote.lastUpdate>(S.lastUpdate||'')){
-      S=remote;
+      S=fixArrays(remote);
       localStorage.setItem(SK,JSON.stringify(S));
       renderMachineBar();renderAll();syncDot('ok');
       toast('☁ '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' aktualisiert');
