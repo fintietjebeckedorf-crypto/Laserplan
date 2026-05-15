@@ -1449,55 +1449,6 @@ function clearFirebaseConfig(){
 }
 
 /* ── INIT ── */
-dailyCleanup();
-
-if(!S.machines.length){
-  // Create default first machine with existing batch data
-  S.batches=[
-    {id:'01 Bunte Salate__8__2026-04-23',kultur:'01 Bunte Salate',satz:8,flaeche:2.14,sowing:'2026-04-23',schlag:'0004',pending:true,nacht:false},
-    {id:'01 Bunte Salate__9__2026-04-30',kultur:'01 Bunte Salate',satz:9,flaeche:2.26,sowing:'2026-04-30',schlag:'0004',pending:true,nacht:false},
-    {id:'01 Bunte Salate__10__2026-05-07',kultur:'01 Bunte Salate',satz:10,flaeche:2.35,sowing:'2026-05-07',schlag:'0004',pending:true,nacht:false},
-    {id:'02 Römer__8__2026-04-20',kultur:'02 Römer',satz:8,flaeche:0.79,sowing:'2026-04-20',schlag:'0004',pending:true,nacht:false},
-    {id:'02 Römer__9__2026-04-30',kultur:'02 Römer',satz:9,flaeche:0.79,sowing:'2026-04-30',schlag:'0004',pending:true,nacht:false},
-    {id:'02 Römer__10__2026-05-08',kultur:'02 Römer',satz:10,flaeche:0.79,sowing:'2026-05-08',schlag:'0004',pending:true,nacht:false},
-    {id:'03 Endivien glatt__9__2026-04-30',kultur:'03 Endivien glatt',satz:9,flaeche:0.96,sowing:'2026-04-30',schlag:'0009',pending:true,nacht:false},
-    {id:'03 Endivien glatt__10__2026-05-06',kultur:'03 Endivien glatt',satz:10,flaeche:1.09,sowing:'2026-05-06',schlag:'0009',pending:true,nacht:false},
-    {id:'04 Frisee kraus__9__2026-04-29',kultur:'04 Frisee kraus',satz:9,flaeche:1.49,sowing:'2026-04-29',schlag:'0009',pending:true,nacht:false},
-    {id:'04 Frisee kraus__10__2026-05-06',kultur:'04 Frisee kraus',satz:10,flaeche:1.49,sowing:'2026-05-06',schlag:'0009',pending:true,nacht:false},
-    {id:'05 Radicchio__8__2026-04-29',kultur:'05 Radicchio',satz:8,flaeche:0.96,sowing:'2026-04-29',schlag:'0012',pending:true,nacht:false},
-    {id:'05 Radicchio__9__2026-05-09',kultur:'05 Radicchio',satz:9,flaeche:0.96,sowing:'2026-05-09',schlag:'0012',pending:true,nacht:false},
-    {id:'07 Rauke Masch.-W.__119__2026-04-16',kultur:'07 Rauke Masch.-W.',satz:119,flaeche:3.33,sowing:'2026-04-16',schlag:'0206',pending:true,nacht:true},
-    {id:'07 Rauke Masch.-W.__120__2026-04-25',kultur:'07 Rauke Masch.-W.',satz:120,flaeche:2.90,sowing:'2026-04-25',schlag:'0016',pending:true,nacht:true},
-    {id:'07 Rauke Masch.-W.__122__2026-04-22',kultur:'07 Rauke Masch.-W.',satz:122,flaeche:5.49,sowing:'2026-04-22',schlag:'0207',pending:true,nacht:true},
-    {id:'07 Rauke Masch.-W.__123__2026-04-27',kultur:'07 Rauke Masch.-W.',satz:123,flaeche:4.12,sowing:'2026-04-27',schlag:'0016',pending:true,nacht:true},
-    {id:'07 Rauke Masch.-W.__124__2026-04-30',kultur:'07 Rauke Masch.-W.',satz:124,flaeche:5.22,sowing:'2026-04-30',schlag:'0208',pending:true,nacht:true},
-    {id:'07 Rauke Masch.-W.__125__2026-05-04',kultur:'07 Rauke Masch.-W.',satz:125,flaeche:3.03,sowing:'2026-05-04',schlag:'0016',pending:true,nacht:true},
-    {id:'07 Rauke Masch.-W.__126__2026-05-08',kultur:'07 Rauke Masch.-W.',satz:126,flaeche:5.72,sowing:'2026-05-08',schlag:'0208',pending:true,nacht:true},
-    {id:'07 Rauke Masch.-W.__127__2026-05-06',kultur:'07 Rauke Masch.-W.',satz:127,flaeche:1.38,sowing:'2026-05-06',schlag:'0016',pending:true,nacht:true},
-    {id:'08 Rauke Bundware__118__2026-04-13',kultur:'08 Rauke Bundware',satz:118,flaeche:1.30,sowing:'2026-04-13',schlag:'0012',pending:true,nacht:false},
-    {id:'08 Rauke Bundware__121__2026-04-25',kultur:'08 Rauke Bundware',satz:121,flaeche:1.27,sowing:'2026-04-25',schlag:'0012',pending:true,nacht:false},
-    {id:'08 Rauke Bundware__8__2026-05-04',kultur:'08 Rauke Bundware',satz:8,flaeche:1.28,sowing:'2026-05-04',schlag:'0012',pending:true,nacht:false},
-    {id:'08 Rauke Bundware__9__2026-05-12',kultur:'08 Rauke Bundware',satz:9,flaeche:1.33,sowing:'2026-05-12',schlag:'0012',pending:true,nacht:false},
-    {id:'10 Feldsalat Saat__108__2026-04-09',kultur:'10 Feldsalat Saat',satz:108,flaeche:2.84,sowing:'2026-04-09',schlag:'0012',pending:true,nacht:false},
-    {id:'10 Feldsalat Saat__109__2026-04-18',kultur:'10 Feldsalat Saat',satz:109,flaeche:1.98,sowing:'2026-04-18',schlag:'0014',pending:true,nacht:false},
-    {id:'10 Feldsalat Saat__110__2026-04-22',kultur:'10 Feldsalat Saat',satz:110,flaeche:1.66,sowing:'2026-04-22',schlag:'0014',pending:true,nacht:false},
-    {id:'10 Feldsalat Saat__111__2026-04-15',kultur:'10 Feldsalat Saat',satz:111,flaeche:1.22,sowing:'2026-04-15',schlag:'0012',pending:true,nacht:false},
-    {id:'10 Feldsalat Saat__112__2026-04-25',kultur:'10 Feldsalat Saat',satz:112,flaeche:1.73,sowing:'2026-04-25',schlag:'0014',pending:true,nacht:false},
-    {id:'10 Feldsalat Saat__113__2026-04-27',kultur:'10 Feldsalat Saat',satz:113,flaeche:1.77,sowing:'2026-04-27',schlag:'0014',pending:true,nacht:false},
-    {id:'10 Feldsalat Saat__114__2026-05-01',kultur:'10 Feldsalat Saat',satz:114,flaeche:1.65,sowing:'2026-05-01',schlag:'0014',pending:true,nacht:false},
-    {id:'10 Feldsalat Saat__115__2026-05-05',kultur:'10 Feldsalat Saat',satz:115,flaeche:1.67,sowing:'2026-05-05',schlag:'0014',pending:true,nacht:false},
-    {id:'10 Feldsalat Saat__116__2026-05-09',kultur:'10 Feldsalat Saat',satz:116,flaeche:1.81,sowing:'2026-05-09',schlag:'0014',pending:true,nacht:false},
-    {id:'12 Babyleaf Salat__108__2026-04-23',kultur:'12 Babyleaf Salat',satz:108,flaeche:0.29,sowing:'2026-04-23',schlag:'0015',pending:true,nacht:false},
-    {id:'12 Babyleaf Salat__109__2026-04-28',kultur:'12 Babyleaf Salat',satz:109,flaeche:0.28,sowing:'2026-04-28',schlag:'0015',pending:true,nacht:false},
-    {id:'12 Babyleaf Salat__110__2026-05-07',kultur:'12 Babyleaf Salat',satz:110,flaeche:0.28,sowing:'2026-05-07',schlag:'0015',pending:true,nacht:false},
-  ];
-  createMachine('Roboter 1',0,4.4);
-} else {
-  renderMachineBar();
-  renderAll();
-}
-
-// Firebase config – direkt eingebaut
 const _hardcodedCfg={
   apiKey:"AIzaSyAuvcSHIIxHJnMnPf2zT2J6i4ekvKrbNJ4",
   authDomain:"laserplan-ams.firebaseapp.com",
@@ -1602,6 +1553,57 @@ window.addEventListener('unhandledrejection',e=>addErrLine('error','Promise: '+e
 
 // ── AUTO-INIT Firebase beim Start ──────────────────────────────
 initFirebase(_cfgToUse);
+
+dailyCleanup();
+
+if(!S.machines.length){
+  // Create default first machine with existing batch data
+  S.batches=[
+    {id:'01 Bunte Salate__8__2026-04-23',kultur:'01 Bunte Salate',satz:8,flaeche:2.14,sowing:'2026-04-23',schlag:'0004',pending:true,nacht:false},
+    {id:'01 Bunte Salate__9__2026-04-30',kultur:'01 Bunte Salate',satz:9,flaeche:2.26,sowing:'2026-04-30',schlag:'0004',pending:true,nacht:false},
+    {id:'01 Bunte Salate__10__2026-05-07',kultur:'01 Bunte Salate',satz:10,flaeche:2.35,sowing:'2026-05-07',schlag:'0004',pending:true,nacht:false},
+    {id:'02 Römer__8__2026-04-20',kultur:'02 Römer',satz:8,flaeche:0.79,sowing:'2026-04-20',schlag:'0004',pending:true,nacht:false},
+    {id:'02 Römer__9__2026-04-30',kultur:'02 Römer',satz:9,flaeche:0.79,sowing:'2026-04-30',schlag:'0004',pending:true,nacht:false},
+    {id:'02 Römer__10__2026-05-08',kultur:'02 Römer',satz:10,flaeche:0.79,sowing:'2026-05-08',schlag:'0004',pending:true,nacht:false},
+    {id:'03 Endivien glatt__9__2026-04-30',kultur:'03 Endivien glatt',satz:9,flaeche:0.96,sowing:'2026-04-30',schlag:'0009',pending:true,nacht:false},
+    {id:'03 Endivien glatt__10__2026-05-06',kultur:'03 Endivien glatt',satz:10,flaeche:1.09,sowing:'2026-05-06',schlag:'0009',pending:true,nacht:false},
+    {id:'04 Frisee kraus__9__2026-04-29',kultur:'04 Frisee kraus',satz:9,flaeche:1.49,sowing:'2026-04-29',schlag:'0009',pending:true,nacht:false},
+    {id:'04 Frisee kraus__10__2026-05-06',kultur:'04 Frisee kraus',satz:10,flaeche:1.49,sowing:'2026-05-06',schlag:'0009',pending:true,nacht:false},
+    {id:'05 Radicchio__8__2026-04-29',kultur:'05 Radicchio',satz:8,flaeche:0.96,sowing:'2026-04-29',schlag:'0012',pending:true,nacht:false},
+    {id:'05 Radicchio__9__2026-05-09',kultur:'05 Radicchio',satz:9,flaeche:0.96,sowing:'2026-05-09',schlag:'0012',pending:true,nacht:false},
+    {id:'07 Rauke Masch.-W.__119__2026-04-16',kultur:'07 Rauke Masch.-W.',satz:119,flaeche:3.33,sowing:'2026-04-16',schlag:'0206',pending:true,nacht:true},
+    {id:'07 Rauke Masch.-W.__120__2026-04-25',kultur:'07 Rauke Masch.-W.',satz:120,flaeche:2.90,sowing:'2026-04-25',schlag:'0016',pending:true,nacht:true},
+    {id:'07 Rauke Masch.-W.__122__2026-04-22',kultur:'07 Rauke Masch.-W.',satz:122,flaeche:5.49,sowing:'2026-04-22',schlag:'0207',pending:true,nacht:true},
+    {id:'07 Rauke Masch.-W.__123__2026-04-27',kultur:'07 Rauke Masch.-W.',satz:123,flaeche:4.12,sowing:'2026-04-27',schlag:'0016',pending:true,nacht:true},
+    {id:'07 Rauke Masch.-W.__124__2026-04-30',kultur:'07 Rauke Masch.-W.',satz:124,flaeche:5.22,sowing:'2026-04-30',schlag:'0208',pending:true,nacht:true},
+    {id:'07 Rauke Masch.-W.__125__2026-05-04',kultur:'07 Rauke Masch.-W.',satz:125,flaeche:3.03,sowing:'2026-05-04',schlag:'0016',pending:true,nacht:true},
+    {id:'07 Rauke Masch.-W.__126__2026-05-08',kultur:'07 Rauke Masch.-W.',satz:126,flaeche:5.72,sowing:'2026-05-08',schlag:'0208',pending:true,nacht:true},
+    {id:'07 Rauke Masch.-W.__127__2026-05-06',kultur:'07 Rauke Masch.-W.',satz:127,flaeche:1.38,sowing:'2026-05-06',schlag:'0016',pending:true,nacht:true},
+    {id:'08 Rauke Bundware__118__2026-04-13',kultur:'08 Rauke Bundware',satz:118,flaeche:1.30,sowing:'2026-04-13',schlag:'0012',pending:true,nacht:false},
+    {id:'08 Rauke Bundware__121__2026-04-25',kultur:'08 Rauke Bundware',satz:121,flaeche:1.27,sowing:'2026-04-25',schlag:'0012',pending:true,nacht:false},
+    {id:'08 Rauke Bundware__8__2026-05-04',kultur:'08 Rauke Bundware',satz:8,flaeche:1.28,sowing:'2026-05-04',schlag:'0012',pending:true,nacht:false},
+    {id:'08 Rauke Bundware__9__2026-05-12',kultur:'08 Rauke Bundware',satz:9,flaeche:1.33,sowing:'2026-05-12',schlag:'0012',pending:true,nacht:false},
+    {id:'10 Feldsalat Saat__108__2026-04-09',kultur:'10 Feldsalat Saat',satz:108,flaeche:2.84,sowing:'2026-04-09',schlag:'0012',pending:true,nacht:false},
+    {id:'10 Feldsalat Saat__109__2026-04-18',kultur:'10 Feldsalat Saat',satz:109,flaeche:1.98,sowing:'2026-04-18',schlag:'0014',pending:true,nacht:false},
+    {id:'10 Feldsalat Saat__110__2026-04-22',kultur:'10 Feldsalat Saat',satz:110,flaeche:1.66,sowing:'2026-04-22',schlag:'0014',pending:true,nacht:false},
+    {id:'10 Feldsalat Saat__111__2026-04-15',kultur:'10 Feldsalat Saat',satz:111,flaeche:1.22,sowing:'2026-04-15',schlag:'0012',pending:true,nacht:false},
+    {id:'10 Feldsalat Saat__112__2026-04-25',kultur:'10 Feldsalat Saat',satz:112,flaeche:1.73,sowing:'2026-04-25',schlag:'0014',pending:true,nacht:false},
+    {id:'10 Feldsalat Saat__113__2026-04-27',kultur:'10 Feldsalat Saat',satz:113,flaeche:1.77,sowing:'2026-04-27',schlag:'0014',pending:true,nacht:false},
+    {id:'10 Feldsalat Saat__114__2026-05-01',kultur:'10 Feldsalat Saat',satz:114,flaeche:1.65,sowing:'2026-05-01',schlag:'0014',pending:true,nacht:false},
+    {id:'10 Feldsalat Saat__115__2026-05-05',kultur:'10 Feldsalat Saat',satz:115,flaeche:1.67,sowing:'2026-05-05',schlag:'0014',pending:true,nacht:false},
+    {id:'10 Feldsalat Saat__116__2026-05-09',kultur:'10 Feldsalat Saat',satz:116,flaeche:1.81,sowing:'2026-05-09',schlag:'0014',pending:true,nacht:false},
+    {id:'12 Babyleaf Salat__108__2026-04-23',kultur:'12 Babyleaf Salat',satz:108,flaeche:0.29,sowing:'2026-04-23',schlag:'0015',pending:true,nacht:false},
+    {id:'12 Babyleaf Salat__109__2026-04-28',kultur:'12 Babyleaf Salat',satz:109,flaeche:0.28,sowing:'2026-04-28',schlag:'0015',pending:true,nacht:false},
+    {id:'12 Babyleaf Salat__110__2026-05-07',kultur:'12 Babyleaf Salat',satz:110,flaeche:0.28,sowing:'2026-05-07',schlag:'0015',pending:true,nacht:false},
+  ];
+  createMachine('Roboter 1',0,4.4);
+} else {
+  renderMachineBar();
+  renderAll();
+}
+
+// Firebase config – direkt eingebaut
+
 
 </script>
 </body>
