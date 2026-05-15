@@ -262,6 +262,16 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
       <div id="mKulturenList" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;padding:6px;border:.5px solid var(--border);border-radius:7px;min-height:36px;"></div>
     </div>
     <div class="form-row">
+      <label>Durchgänge pro Kultur (Tage nach Aussaat)</label>
+      <div style="font-size:.68rem;color:var(--tm);margin-bottom:5px">Z.B. Rauke: 2 Durchgänge an Tag 7 und Tag 17 nach Aussaat</div>
+      <div id="mPassesTable" style="border:.5px solid var(--border);border-radius:7px;overflow:hidden;">
+        <div style="display:grid;grid-template-columns:1fr 60px 1fr;gap:0;background:#172015;color:#9FE1CB;font-size:.65rem;font-weight:700;padding:4px 8px;">
+          <span>Kultur</span><span style="text-align:center">Anz.</span><span>Tage (kommagetrennt)</span>
+        </div>
+        <div id="mPassesList" style="max-height:200px;overflow-y:auto;"></div>
+      </div>
+    </div>
+    <div class="form-row">
       <label>Manuelle Feldaufgaben (ohne Sätze) – optional</label>
       <div id="mManualFields" style="border:.5px solid var(--border);border-radius:7px;padding:6px;margin-top:4px;">
         <div style="font-size:.7rem;color:var(--tm);margin-bottom:5px">Felder auf denen diese Maschine arbeitet ohne feste Sätze – z.B. Schlag 0012 mit 3 ha</div>
@@ -481,10 +491,49 @@ function status(b,m){
 
 function getOpen(m){
   const batches=Array.isArray(S.batches)?S.batches:Object.values(S.batches||{});
-  const mk=m.kulturen&&m.kulturen.length?m.kulturen:null; // null = alle
-  return batches
+  // kulturen===null means no kulturen (e.g. Pflug - only manual fields)
+  // kulturen===[] means all kulturen
+  // kulturen=[...] means specific kulturen
+  if(m.kulturen===null)return []; // no batches, only manual fields
+  const mk=m.kulturen&&m.kulturen.length?m.kulturen:null;
+  const cfg=m.passesConfig||{};
+  const result=[];
+  batches
     .filter(b=>b&&b.pending&&!(m.comp||{})[b.id]?.done&&(!mk||mk.includes(b.kultur)))
-    .sort((a,b)=>new Date(a.sowing)-new Date(b.sowing));
+    .forEach(b=>{
+      const pcfg=cfg[b.kultur]||{n:1,days:'7'};
+      const n=parseInt(pcfg.n)||1;
+      const daysList=String(pcfg.days).split(',').map(d=>parseInt(d.trim())||7);
+      if(n<=1){
+        // Single pass - use original sowing date
+        result.push(b);
+      } else {
+        // Multiple passes - create virtual batches for each pass
+        for(let p=0;p<n;p++){
+          const targetDay=daysList[p]||daysList[daysList.length-1]||7;
+          // Sowing date for this pass = original sowing + offset so it's due on targetDay
+          const sowDate=new Date(b.sowing);
+          // The pass should be done at targetDay after original sowing
+          // We fake the sowing date so the "7 day" logic shows correct urgency
+          const fakeSow=new Date(sowDate.getTime());
+          // pass 0: use original sowing (due at days[0])
+          // pass 1+: due at days[p] after original sowing
+          const fakeSowStr=p===0?b.sowing:localDateStr(new Date(sowDate.getTime()+(daysList[p-1]||0)*86400000));
+          const pid=b.id+'__pass'+p;
+          result.push({
+            ...b,
+            id:pid,
+            _origId:b.id,
+            sowing:fakeSowStr,
+            passNum:p+1,
+            totalPasses:n,
+            targetDay:daysList[p]||7,
+            label:`Durchgang ${p+1}/${n}`
+          });
+        }
+      }
+    });
+  return result.sort((a,b)=>new Date(a.sowing)-new Date(b.sowing));
 }
 
 /* ── MACHINE BAR ── */
@@ -520,6 +569,26 @@ function openMachineModal(mid){
   document.getElementById('mName').value=m?m.name:`Roboter ${S.machines.length+1}`;
   document.getElementById('mCap').value=m?m.cap:4.4;
   document.getElementById('mTarget').value=m?(m.targetDays||7):7;
+  // Build passes table per kultur
+  const allKulturen2=[...new Set(S.batches.map(b=>b.kultur))].sort();
+  const mPasses=m?(m.passesConfig||{}):{}; 
+  const pList=document.getElementById('mPassesList');
+  if(pList){
+    if(!allKulturen2.length){
+      pList.innerHTML='<div style="padding:6px 8px;font-size:.72rem;color:var(--tm)">Erst Kulturliste laden</div>';
+    } else {
+      pList.innerHTML=allKulturen2.map(k=>{
+        const cfg=mPasses[k]||{n:1,days:'7'};
+        return `<div style="display:grid;grid-template-columns:1fr 60px 1fr;gap:0;border-bottom:.5px solid var(--border);padding:4px 8px;align-items:center;" data-kultur="${k}">
+          <span style="font-size:.72rem">${k.replace(/^\d+\s*/,'')}</span>
+          <input type="number" value="${cfg.n}" min="1" max="5" step="1" 
+            style="width:50px;font-size:.72rem;border:.5px solid var(--border);border-radius:4px;padding:2px 4px;text-align:center;" class="pc-n">
+          <input type="text" value="${cfg.days}" placeholder="7"
+            style="width:100%;font-size:.72rem;border:.5px solid var(--border);border-radius:4px;padding:2px 4px;" class="pc-days">
+        </div>`;
+      }).join('');
+    }
+  }
   // Fill kulturen checkboxes
   const allKulturen=[...new Set(S.batches.map(b=>b.kultur))].sort();
   const mKulturen=m?(m.kulturen||[]):[];
@@ -559,16 +628,34 @@ function saveModal(){
   const tgt=parseInt(document.getElementById('mTarget').value)||7;
   const checked=Array.from(document.querySelectorAll('#mKulturenList input:checked')).map(i=>i.value);
   const allK=[...new Set(S.batches.map(b=>b.kultur))];
+  // Empty checked = no kulturen (e.g. Pflug), all checked = alle kulturen (store as [])
   const selKult=checked.length===allK.length?[]:checked;
+  // selKult=[] means ALL kulturen, selKult=null means NONE
+  // We use a special marker for "no kulturen"
+  const finalKult=checked.length===0?null:selKult;
   if(modalMid){
     const m=getMachine(modalMid);
-    m.name=name;m.cap=cap;m.targetDays=tgt;m.colorIdx=selectedColor;
+    const passesConfig={};
+    document.querySelectorAll('#mPassesList [data-kultur]').forEach(row=>{
+      const k=row.dataset.kultur;
+      const n=parseInt(row.querySelector('.pc-n').value)||1;
+      const days=row.querySelector('.pc-days').value||'7';
+      passesConfig[k]={n,days};
+    });
+    m.name=name;m.cap=cap;m.targetDays=tgt;m.passesConfig=passesConfig;m.colorIdx=selectedColor;
     m.color=MC[selectedColor%MC.length];m.colorLight=MCL[selectedColor%MCL.length];
-    m.kulturen=selKult;
+    m.kulturen=finalKult;
     m.manualFields=getManualFields();
   } else {
+    const passesConfig2={};
+    document.querySelectorAll('#mPassesList [data-kultur]').forEach(row=>{
+      const k=row.dataset.kultur;
+      const n=parseInt(row.querySelector('.pc-n').value)||1;
+      const days=row.querySelector('.pc-days').value||'7';
+      passesConfig2[k]={n,days};
+    });
     const nm=createMachine(name,selectedColor,cap,tgt);
-    nm.kulturen=selKult;
+    nm.kulturen=finalKult;nm.passesConfig=passesConfig2;
     nm.manualFields=getManualFields();
   }
   closeModal();save();renderMachineBar();renderAll();
@@ -981,7 +1068,7 @@ function renderWoche(m){
         onmousedown="ddDown(event,'${it.id}','${m.id}')"
         ontouchstart="ddDown(event,'${it.id}','${m.id}')">
         <span class="drag-handle">⠿</span>
-        <div class="wk">${it.isManual?'📍 Schlag '+it.schlag:it.kultur.replace(/^\d+\s*/,'')+' S'+it.satz+(it.schlag?' ·'+it.schlag:'')}</div>
+        <div class="wk">${it.isManual?'📍 Schlag '+it.schlag:it.kultur.replace(/^\d+\s*/,'')+' S'+it.satz+(it.schlag?' ·'+it.schlag:'')+(it.totalPasses>1?' ('+it.label+')':'')}</div>
         <div class="wd">${it.flaeche.toFixed(2)} ha${it.nacht?' 🌙':''}${!it.isManual&&age>(m.targetDays||7)?` <b style="color:${it.nacht?'#F09595':'var(--red)'}">`+(age-(m.targetDays||7))+`d ⚠</b>`:''}</div>
       </div>`;
       prevS=it.schlag;
