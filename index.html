@@ -161,6 +161,20 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
 .color-swatch{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform .1s;}
 .color-swatch.sel{border-color:#fff;box-shadow:0 0 0 2px #172015;transform:scale(1.15);}
 
+/* Error Console */
+#errConsole{position:fixed;bottom:0;left:0;right:0;max-height:40vh;overflow-y:auto;
+  background:#1a1a1a;color:#f0f0f0;font-family:monospace;font-size:.72rem;
+  border-top:2px solid #444;z-index:9998;display:none;padding:.5rem;}
+#errConsole .err-line{padding:2px 6px;border-bottom:.5px solid #333;display:flex;gap:8px;align-items:flex-start;}
+#errConsole .err-line.error{color:#ff6b6b;}
+#errConsole .err-line.warn{color:#ffd93d;}
+#errConsole .err-line.log{color:#6bcb77;}
+#errConsole .err-time{color:#888;flex-shrink:0;font-size:.68rem;}
+#errConsole .err-txt{flex:1;word-break:break-all;white-space:pre-wrap;}
+#errBar{position:fixed;bottom:0;right:80px;background:#1a1a1a;color:#f0f0f0;
+  font-size:.72rem;padding:3px 10px;border-radius:8px 8px 0 0;cursor:pointer;z-index:9999;
+  border:1px solid #444;border-bottom:none;}
+#errBar .err-count{background:#ff6b6b;color:#fff;border-radius:10px;padding:0 5px;margin-left:4px;font-size:.65rem;}
 #sm{position:fixed;bottom:1rem;right:1rem;background:#172015;color:#9FE1CB;padding:.4rem .85rem;border-radius:8px;font-size:.75rem;opacity:0;transition:opacity .3s;pointer-events:none;z-index:9999;}
 #sm.show{opacity:1;}
 /* Sync indicator */
@@ -1521,6 +1535,50 @@ async function testConnection(){
     console.error(e);
   }
 }
+
+// ── ERROR CONSOLE ────────────────────────────────────────────
+let errCount=0;
+
+function addErrLine(type, msg){
+  errCount++;
+  const d=document.getElementById('errLines');
+  if(!d)return;
+  const now=new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const div=document.createElement('div');
+  div.className='err-line '+type;
+  div.innerHTML=`<span class="err-time">${now}</span><span class="err-txt">[${type.toUpperCase()}] ${String(msg).replace(/</g,'&lt;')}</span>`;
+  d.appendChild(div);
+  d.scrollTop=d.scrollHeight;
+  updateErrBar();
+}
+
+function updateErrBar(){
+  const bar=document.getElementById('errBar');
+  const cnt=document.getElementById('errCount');
+  if(bar){bar.style.display='block';}
+  if(cnt){cnt.textContent=errCount;}
+}
+
+function toggleConsole(){
+  const c=document.getElementById('errConsole');
+  const t=document.getElementById('errToggleTxt');
+  const open=c.style.display==='none';
+  c.style.display=open?'block':'none';
+  if(t)t.textContent=open?'▼ schließen':'▲ öffnen';
+}
+
+// Intercept all console methods
+const _origError=console.error.bind(console);
+const _origWarn=console.warn.bind(console);
+const _origLog=console.log.bind(console);
+
+console.error=function(...a){_origError(...a);addErrLine('error',a.map(x=>typeof x==='object'?JSON.stringify(x):x).join(' '));};
+console.warn=function(...a){_origWarn(...a);addErrLine('warn',a.map(x=>typeof x==='object'?JSON.stringify(x):x).join(' '));};
+console.log=function(...a){_origLog(...a);addErrLine('log',a.map(x=>typeof x==='object'?JSON.stringify(x):x).join(' '));};
+
+// Catch uncaught errors
+window.addEventListener('error',e=>addErrLine('error','Uncaught: '+e.message+' ('+e.filename?.split('/').pop()+':'+e.lineno+')'));
+window.addEventListener('unhandledrejection',e=>addErrLine('error','Promise: '+e.reason));
 
 // ── AUTO-INIT Firebase beim Start ──────────────────────────────
 initFirebase(_cfgToUse);
