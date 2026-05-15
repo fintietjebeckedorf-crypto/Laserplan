@@ -332,7 +332,10 @@ function save(){
   S.lastOpened=Tstr;
   S.lastUpdate=new Date().toISOString();
   localStorage.setItem(SK,JSON.stringify(S));
-  sbWrite(); // sync to Supabase
+  // Only sync if we have real data – NEVER overwrite cloud with empty state
+  if(S.machines&&S.machines.length>0&&S.batches&&S.batches.length>0){
+    sbWrite();
+  }
 }
 let S=loadState();
 
@@ -542,13 +545,15 @@ function renderMachineBar(){
   let h='';
   S.machines.forEach(m=>{
     const active=m.id===S.activeMachineId;
-    const openCount=getOpen(m).length;
+    const open=getOpen(m);
+    const overdue=open.filter(b=>dDiff(b.sowing,TODAY)>(m.targetDays||7));
+    const od=overdue.length;
     h+=`<div class="mtab ${active?'active':''}"
       style="${active?`background:${m.color};border-color:${m.color};`:`border-color:${m.color}40;color:${m.color};`}"
       onclick="selectMachine('${m.id}')">
       <div class="mdot" style="background:${m.color}"></div>
       ${m.name}
-      <span style="font-size:.65rem;opacity:.75;margin-left:2px">(${openCount})</span>
+      ${od>0?`<span style="font-size:.63rem;font-weight:700;background:#FFC7CE;color:#9C0006;border-radius:10px;padding:0 6px;margin-left:3px">⚠ ${od}</span>`:''}
       <span class="mclose" onclick="event.stopPropagation();openMachineModal('${m.id}')">✎</span>
     </div>`;
   });
@@ -1483,18 +1488,22 @@ async function sbRead(){
     if(!r.ok){syncDot('ok');return;}
     const rows=await r.json();
     if(!rows||!rows.length||!rows[0].data){
-        if(S.batches&&S.batches.length)sbWrite();
+      // Nothing in cloud - only push if we have real data
+      if(S.machines&&S.machines.length>0&&S.batches&&S.batches.length>0)sbWrite();
       syncDot('ok');return;
     }
-    const remote=rows[0].data;
-    if(remote.lastUpdate&&remote.lastUpdate>(S.lastUpdate||'')){
-      S=fixArrays(remote);
+    const remote=fixArrays(rows[0].data);
+    const remoteHasMachines=remote.machines&&remote.machines.length>0;
+    const localHasMachines=S.machines&&S.machines.length>0;
+    const remoteNewer=remote.lastUpdate&&remote.lastUpdate>(S.lastUpdate||'');
+    const localEmpty=!localHasMachines;
+    // Take remote if: remote is newer OR local is empty but remote has data
+    if(remoteNewer||(remoteHasMachines&&localEmpty)){
+      S=remote;
       localStorage.setItem(SK,JSON.stringify(S));
       renderMachineBar();renderAll();syncDot('ok');
-      toast('☁ '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' aktualisiert');
-    } else {
-        syncDot('ok');
-    }
+      toast('☁ Daten geladen ✓');
+    } else syncDot('ok');
   }catch(e){syncDot('error');console.error('sbRead:',e);}
 }
 
