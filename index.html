@@ -687,6 +687,19 @@ function getManualFields(){
   })).filter(f=>f.schlag&&f.ha>0);
 }
 
+function doneManualField(mid, idx){
+  const m=getMachine(mid);if(!m)return;
+  if(!m.manualFieldsDone)m.manualFieldsDone=[];
+  if(!m.manualFieldsDone.includes(idx))m.manualFieldsDone.push(idx);
+  // Also remove from weekPlan
+  Object.keys(m.weekPlan||{}).forEach(d=>{
+    m.weekPlan[d]=(m.weekPlan[d]||[]).filter(id=>id!=='manual_'+idx);
+    if(!m.weekPlan[d].length)delete m.weekPlan[d];
+  });
+  save();renderWoche(activeMachine());
+  toast('Manuelle Feldaufgabe abgeschlossen ✓');
+}
+
 function addManualFieldInline(mid){
   const m=getMachine(mid);if(!m)return;
   const schlag=prompt('Schlag-Nummer (z.B. 0012):');
@@ -941,7 +954,8 @@ function getWeekPlan(m){
       if(id.startsWith('manual_')){
         const fi=parseInt(id.slice(7));
         const f=(m.manualFields||[])[fi];
-        if(!f)return;
+        const mfDone2=new Set(m.manualFieldsDone||[]);
+        if(!f||mfDone2.has(fi))return;
         items.push({id,kultur:'Manuell',satz:0,flaeche:f.ha,
           sowing:localDateStr(TODAY),schlag:f.schlag,
           pending:true,nacht:false,isManual:true,fieldSwitch:false});
@@ -1113,16 +1127,23 @@ function renderWoche(m){
   }
   // Manual fields in pool
   const mf=(m.manualFields||[]);
+  const mfDone=new Set(m.manualFieldsDone||[]);
+  const mfOpen=mf.filter((f,i)=>!mfDone.has(i));
   if(mf.length){
     html+=`<div class="pool-section" style="margin-top:.5rem;">
-      <div class="pool-title" style="margin-bottom:.4rem">📍 Manuelle Feldaufgaben (ohne Satz)</div>
+      <div class="pool-title" style="margin-bottom:.4rem">📍 Manuelle Feldaufgaben (${mfOpen.length} offen)</div>
       <div style="display:flex;flex-wrap:wrap;gap:5px;">
-        ${mf.map((f,i)=>`<div class="pcard" style="background:var(--bl);color:var(--blue);border-color:var(--blue);"
-          data-id="manual_${i}" data-mid="${m.id}"
-          onmousedown="ddDown(event,'manual_${i}','${m.id}')"
-          ontouchstart="ddDown(event,'manual_${i}','${m.id}')">
-          <div class="pk">📍 Schlag ${f.schlag}</div>
-          <div class="pd">${f.ha.toFixed(2)} ha · ca. ${(f.ha/0.2).toFixed(0)}h</div>
+        ${mf.map((f,i)=>mfDone.has(i)?'':
+        `<div style="display:flex;flex-direction:column;gap:3px;">
+          <div class="pcard" style="background:var(--bl);color:var(--blue);border-color:var(--blue);"
+            data-id="manual_${i}" data-mid="${m.id}"
+            onmousedown="ddDown(event,'manual_${i}','${m.id}')"
+            ontouchstart="ddDown(event,'manual_${i}','${m.id}')">
+            <div class="pk">📍 Schlag ${f.schlag}</div>
+            <div class="pd">${f.ha.toFixed(2)} ha · ca. ${(f.ha/0.2).toFixed(0)}h</div>
+          </div>
+          <button class="btn p" style="font-size:.65rem;padding:2px 6px;"
+            onclick="doneManualField('${m.id}',${i})">✓ Fertig</button>
         </div>`).join('')}
       </div>
     </div>`;
