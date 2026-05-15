@@ -1222,6 +1222,7 @@ async function sbWrite(){
       headers:{...SB_HDR,'Prefer':'return=minimal'},
       body:JSON.stringify({data:S,updated_at:new Date().toISOString()})
     });
+    console.log('sbWrite HTTP:',r.status);
     syncDot(r.ok||r.status===204?'ok':'error');
     if(!r.ok&&r.status!==204)console.error('sbWrite:',r.status,await r.text());
   }catch(e){syncDot('error');console.error('sbWrite:',e);}
@@ -1232,19 +1233,26 @@ async function sbRead(){
     const r=await fetch(SB_URL+'/rest/v1/laserplan?id=eq.main&select=data,updated_at',{
       headers:SB_HDR
     });
+    console.log('sbRead HTTP:',r.status);
     if(!r.ok){syncDot('ok');return;}
     const rows=await r.json();
+    console.log('sbRead rows:',rows.length,'hasData:',!!(rows[0]&&rows[0].data));
     if(!rows||!rows.length||!rows[0].data){
+      console.log('sbRead: no data in DB, pushing local');
       if(S.batches&&S.batches.length)sbWrite();
       syncDot('ok');return;
     }
     const remote=rows[0].data;
+    console.log('sbRead remote.lastUpdate:',remote.lastUpdate,'local:',S.lastUpdate||'none');
     if(remote.lastUpdate&&remote.lastUpdate>(S.lastUpdate||'')){
       S=fixArrays(remote);
       localStorage.setItem(SK,JSON.stringify(S));
       renderMachineBar();renderAll();syncDot('ok');
       toast('☁ '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' aktualisiert');
-    } else syncDot('ok');
+    } else {
+      console.log('sbRead: local is up to date');
+      syncDot('ok');
+    }
   }catch(e){syncDot('error');console.error('sbRead:',e);}
 }
 
