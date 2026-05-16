@@ -444,6 +444,8 @@ document.getElementById('fileInput').addEventListener('change',e=>{
   rd.onload=ev=>{
     try{
       if(typeof XLSX==='undefined'){toast('XLSX Bibliothek nicht geladen - Seite neu laden',true);return;}
+      // Stop polling while we process the file
+      if(_pollTimer)clearInterval(_pollTimer);
       const nb=parseXlsx(new Uint8Array(ev.target.result));
       if(!nb||!nb.length){toast('Keine Sätze gefunden',true);return;}
       const newIds=new Set(nb.map(b=>b.id));
@@ -458,9 +460,11 @@ document.getElementById('fileInput').addEventListener('change',e=>{
         Object.keys(m.notes||{}).forEach(id=>{if(!newIds.has(id))delete (m.notes||{})[id];});
         if(m.running&&!newIds.has(m.running))m.running=null;
       });
-      save(); // this now calls sbWrite() automatically
+      save(); // writes to Supabase
       renderAll();
       toast(`${nb.length} Sätze geladen ✓`);
+      // Restart polling after a short delay
+      setTimeout(()=>startPolling(),3000);
     }catch(err){toast('Fehler: '+err.message,true);}
     e.target.value='';
   };
@@ -510,17 +514,17 @@ function getOpen(m){
         // Single pass - use original sowing date
         result.push(b);
       } else {
-        // Multiple passes - create virtual batches for each pass
+        // Multiple passes - each pass is due at daysList[p] days after original sowing
+        // We shift the fake sowing date so that:
+        // age = dDiff(fakeSowing, TODAY) = targetDays when the pass is due
+        // => fakeSowing = originalSowing + daysList[p] - targetDays
+        const tgt = m.targetDays||7;
+        const sowDate=new Date(b.sowing);
         for(let p=0;p<n;p++){
-          const targetDay=daysList[p]||daysList[daysList.length-1]||7;
-          // Sowing date for this pass = original sowing + offset so it's due on targetDay
-          const sowDate=new Date(b.sowing);
-          // The pass should be done at targetDay after original sowing
-          // We fake the sowing date so the "7 day" logic shows correct urgency
-          const fakeSow=new Date(sowDate.getTime());
-          // pass 0: use original sowing (due at days[0])
-          // pass 1+: due at days[p] after original sowing
-          const fakeSowStr=p===0?b.sowing:localDateStr(new Date(sowDate.getTime()+(daysList[p-1]||0)*86400000));
+          const dueDay=daysList[p]||7; // days after original sowing when this pass is due
+          // fakeSowing: shift so that on the due date, age = tgt (= shown as "just due")
+          const fakeMs=sowDate.getTime()+(dueDay-tgt)*86400000;
+          const fakeSowStr=localDateStr(new Date(fakeMs));
           const pid=b.id+'__pass'+p;
           result.push({
             ...b,
@@ -529,8 +533,8 @@ function getOpen(m){
             sowing:fakeSowStr,
             passNum:p+1,
             totalPasses:n,
-            targetDay:daysList[p]||7,
-            label:`Durchgang ${p+1}/${n}`
+            dueDay,
+            label:`DG ${p+1}/${n} (Tag ${dueDay})`
           });
         }
       }
@@ -1487,9 +1491,7 @@ async function sbRead(){
     if(!r.ok){syncDot('ok');return;}
     const rows=await r.json();
     if(!rows||!rows.length||!rows[0].data){
-      // Nothing in cloud - only push if we have real data
-      // Cloud empty – push local only if we have machines (freshly set up)
-      if(S.machines&&S.machines.length>0)sbWrite();
+      // Cloud is empty - don't write anything, wait for user action
       syncDot('ok');return;
     }
     const remote=fixArrays(rows[0].data);
@@ -1509,7 +1511,11 @@ async function sbRead(){
 // save() already calls sbWrite via scheduleSyncToCloud - no override needed
 
 // Poll every 8 seconds
-setInterval(()=>sbRead(),8000);
+function startPolling(){
+  if(_pollTimer)clearInterval(_pollTimer);
+  _pollTimer=setInterval(()=>sbRead(),8000);
+}
+startPolling();
 
 // ── ERROR CONSOLE ──────────────────────────────────────────────
 let _ec=0;
