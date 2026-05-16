@@ -1518,6 +1518,7 @@ async function sbWrite(){
 }
 
 let _lastServerUpdate=''; // track what we last got from server
+let _pollTimer=null;
 
 async function sbRead(){
   try{
