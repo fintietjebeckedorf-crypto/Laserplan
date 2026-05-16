@@ -325,15 +325,14 @@ function fixArrays(obj){
 }
 
 function loadState(){
-  try{const s=localStorage.getItem(SK);if(s)return fixArrays(JSON.parse(s));}catch(e){}
+  // Never load from localStorage - always start empty and wait for Supabase
   return{batches:[],machines:[],activeMachineId:null,lastOpened:null,lastUpdate:null};
 }
 function save(){
   S.lastOpened=Tstr;
   S.lastUpdate=new Date().toISOString();
-  localStorage.setItem(SK,JSON.stringify(S));
-  // Only sync if we have real data – NEVER overwrite cloud with empty state
-  if(S.machines&&S.machines.length>0&&S.batches&&S.batches.length>0){
+  // Only write to Supabase if we have real data
+  if(S.machines&&S.machines.length>0){
     sbWrite();
   }
 }
@@ -1431,7 +1430,7 @@ function exportCSV(){
 
 function hardReset(){
   if(!confirm('Alles zurücksetzen? Alle Maschinen, Pläne und Fortschritte werden gelöscht.'))return;
-  localStorage.removeItem(SK);location.reload();
+  location.reload();
 }
 
 function toast(msg,err){
@@ -1489,7 +1488,8 @@ async function sbRead(){
     const rows=await r.json();
     if(!rows||!rows.length||!rows[0].data){
       // Nothing in cloud - only push if we have real data
-      if(S.machines&&S.machines.length>0&&S.batches&&S.batches.length>0)sbWrite();
+      // Cloud empty – push local only if we have machines (freshly set up)
+      if(S.machines&&S.machines.length>0)sbWrite();
       syncDot('ok');return;
     }
     const remote=fixArrays(rows[0].data);
@@ -1500,7 +1500,6 @@ async function sbRead(){
     // Take remote if: remote is newer OR local is empty but remote has data
     if(remoteNewer||(remoteHasMachines&&localEmpty)){
       S=remote;
-      localStorage.setItem(SK,JSON.stringify(S));
       renderMachineBar();renderAll();syncDot('ok');
       toast('☁ Daten geladen ✓');
     } else syncDot('ok');
