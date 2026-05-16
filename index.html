@@ -448,17 +448,18 @@ document.getElementById('fileInput').addEventListener('change',e=>{
       if(_pollTimer)clearInterval(_pollTimer);
       const nb=parseXlsx(new Uint8Array(ev.target.result));
       if(!nb||!nb.length){toast('Keine Sätze gefunden',true);return;}
-      const newIds=new Set(nb.map(b=>b.id));
-      S.batches=nb;
-      // clean up each machine's weekPlan and comp
+      // MERGE: add new/updated batches, never auto-delete existing ones
+      const existingMap={};
+      (S.batches||[]).forEach(b=>{existingMap[b.id]=b;});
+      nb.forEach(b=>{existingMap[b.id]={...(existingMap[b.id]||{}),...b};});
+      S.batches=Object.values(existingMap);
+      const allIds=new Set(S.batches.map(b=>b.id));
       (S.machines||[]).forEach(m=>{
         Object.keys(m.weekPlan||{}).forEach(d=>{
-          (m.weekPlan||{})[d]=((m.weekPlan||{})[d]||[]).filter(id=>newIds.has(id));
-          if(!(m.weekPlan||{})[d].length)delete (m.weekPlan||{})[d];
+          m.weekPlan[d]=(m.weekPlan[d]||[]).filter(id=>allIds.has(id)||id.startsWith('manual_'));
+          if(!m.weekPlan[d].length)delete m.weekPlan[d];
         });
-        Object.keys(m.comp||{}).forEach(id=>{if(!newIds.has(id))delete (m.comp||{})[id];});
-        Object.keys(m.notes||{}).forEach(id=>{if(!newIds.has(id))delete (m.notes||{})[id];});
-        if(m.running&&!newIds.has(m.running))m.running=null;
+        if(m.running&&!allIds.has(m.running))m.running=null;
       });
       save(); // writes to Supabase
       renderAll();
@@ -1338,6 +1339,8 @@ function renderAlle(m){
       <option value="all">Alle Kulturen</option>
       ${kulturen.map(k=>`<option value="${k}" ${fKu===k?'selected':''}>${k}</option>`).join('')}
     </select>
+    <button class="btn dr" onclick="deleteAllDone()" style="margin-left:auto;font-size:.7rem">🗑 Fertige löschen</button>
+    <button class="btn dr" onclick="deleteAllBatches()" style="font-size:.7rem">🗑 Alle löschen</button>
   </div>`;
 
   if(!batches.length){html+=`<p style="color:var(--tm);text-align:center;padding:2rem">Keine Sätze.</p>`;document.getElementById('tc').innerHTML=html;return;}
@@ -1432,6 +1435,33 @@ function exportCSV(){
   a.download=`Laserplan_${m.name.replace(/\s/g,'_')}_${Tstr}.csv`;a.click();toast('CSV exportiert');
 }
 
+
+function deleteAllDone(){
+  const doneIds=new Set();
+  S.machines.forEach(mx=>{
+    Object.entries(mx.comp||{}).forEach(([id,v])=>{if(v&&v.done)doneIds.add(id);});
+  });
+  if(!doneIds.size){toast('Keine fertigen Sätze vorhanden');return;}
+  if(!confirm(doneIds.size+' fertige Sätze wirklich löschen?'))return;
+  S.batches=(S.batches||[]).filter(b=>!doneIds.has(b.id));
+  S.machines.forEach(mx=>{
+    doneIds.forEach(id=>{if(mx.comp)delete mx.comp[id];if(mx.notes)delete mx.notes[id];});
+    Object.keys(mx.weekPlan||{}).forEach(d=>{
+      mx.weekPlan[d]=(mx.weekPlan[d]||[]).filter(id=>!doneIds.has(id));
+      if(!mx.weekPlan[d].length)delete mx.weekPlan[d];
+    });
+  });
+  save();renderAll();toast(doneIds.size+' Sätze gelöscht ✓');
+}
+
+function deleteAllBatches(){
+  if(!confirm('ALLE Sätze löschen? Maschinen bleiben erhalten.'))return;
+  if(!confirm('Wirklich? Kann nicht rückgängig gemacht werden!'))return;
+  S.batches=[];
+  S.machines.forEach(mx=>{mx.comp={};mx.notes={};mx.weekPlan={};mx.running=null;});
+  save();renderAll();toast('Alle Sätze gelöscht');
+}
+
 function hardReset(){
   if(!confirm('Alles zurücksetzen? Alle Maschinen, Pläne und Fortschritte werden gelöscht.'))return;
   location.reload();
@@ -1475,13 +1505,19 @@ async function sbWrite(){
       headers:{...SB_HDR,'Prefer':'resolution=merge-duplicates,return=minimal'},
       body:JSON.stringify(payload)
     });
-    syncDot(r.ok||r.status===201||r.status===204?'ok':'error');
+    if(r.ok||r.status===201||r.status===204){
+      // Update our tracking timestamp to prevent immediate re-read
+      _lastServerUpdate=payload.updated_at;
+      syncDot('ok');
+    } else syncDot('error');
     if(!r.ok&&r.status!==201&&r.status!==204){
       const txt=await r.text();
       console.error('sbWrite error:',r.status,txt);
     }
   }catch(e){syncDot('error');console.error('sbWrite:',e);}
 }
+
+let _lastServerUpdate=''; // track what we last got from server
 
 async function sbRead(){
   try{
@@ -1490,20 +1526,23 @@ async function sbRead(){
     });
     if(!r.ok){syncDot('ok');return;}
     const rows=await r.json();
-    if(!rows||!rows.length||!rows[0].data){
-      // Cloud is empty - don't write anything, wait for user action
-      syncDot('ok');return;
-    }
+    if(!rows||!rows.length||!rows[0].data){syncDot('ok');return;}
+
+    const serverUpdatedAt=rows[0].updated_at||'';
     const remote=fixArrays(rows[0].data);
     const remoteHasMachines=remote.machines&&remote.machines.length>0;
     const localHasMachines=S.machines&&S.machines.length>0;
-    const remoteNewer=remote.lastUpdate&&remote.lastUpdate>(S.lastUpdate||'');
-    const localEmpty=!localHasMachines;
-    // Take remote if: remote is newer OR local is empty but remote has data
-    if(remoteNewer||(remoteHasMachines&&localEmpty)){
-      S=remote;
-      renderMachineBar();renderAll();syncDot('ok');
-      toast('☁ Daten geladen ✓');
+
+    // Only apply if server has newer data than what we last received
+    if(serverUpdatedAt!==_lastServerUpdate){
+      _lastServerUpdate=serverUpdatedAt;
+      // Always take remote if it has machines (cloud is source of truth)
+      if(remoteHasMachines){
+        S=remote;
+        renderMachineBar();renderAll();syncDot('ok');
+        if(!localHasMachines)toast('☁ Daten geladen ✓');
+        else toast('☁ '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' aktualisiert');
+      } else syncDot('ok');
     } else syncDot('ok');
   }catch(e){syncDot('error');console.error('sbRead:',e);}
 }
