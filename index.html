@@ -906,7 +906,7 @@ function renderHeute(m){
       <div class="nnum ${nc}">${i+1}</div>
       <div class="ninfo">
         <div class="nk">${b.kultur} · S${b.satz} · Schl.${b.schlag||'–'}</div>
-        <div class="nd">${fmtS(b.sowing)} · ${age>=0?age+'d':'geplant'} · ${b.flaeche.toFixed(2)} ha${b.nacht?' 🌙':''}</div>
+        <div class="nd">${fmtS(b.sowing)} · ${age>=0?age+'d':'geplant'} · ${b.flaeche.toFixed(2)} ha</div>
       </div>
       <button class="btn p" style="font-size:.66rem;padding:2px 6px;background:${m.color}" onclick="setRun('${m.id}','${b.id}')">▶ Start</button>
     </div>`;
@@ -955,8 +955,11 @@ document.getElementById('tc').innerHTML=`<div class="today-grid">${nowHtml}${nHt
 /* ── TAB 2: WOCHENPLAN (Drag & Drop) ── */
 function getWeekPlan(m){
   const plan=[];
-  for(let d=0;d<7;d++){
+  // Show past 3 days with unfinished items + today + 6 future days
+  for(let d=-3;d<7;d++){
     const dt=addDays(TODAY,d);const dStr=ds(dt);
+    // For past days: only include if there are unfinished items
+    const isPast=d<0;
     const manIds=(m.weekPlan||{})[dStr]||[];
     const items=[];let tHa=0,prevS=null,sw2=0;
     manIds.forEach(id=>{
@@ -976,7 +979,9 @@ function getWeekPlan(m){
       items.push({...b,fieldSwitch:isw});
       tHa=Math.round((tHa+b.flaeche)*100)/100;prevS=b.schlag;
     });
-    plan.push({date:dt,ds:dStr,items,totalHa:tHa,switches:sw2});
+    // Skip past days with no items
+    if(isPast&&!items.length)continue;
+    plan.push({date:dt,ds:dStr,items,totalHa:tHa,switches:sw2,isPast});
   }
   return plan;
 }
@@ -1071,9 +1076,9 @@ function renderWoche(m){
     const capOk=day.totalHa<=m.cap+0.05;
 
     html+=`<div class="day-col${isT?' tc':''}" data-ds="${day.ds}" data-mid="${m.id}"
-      style="${isT?`border-color:${m.color};`:''}">
-      <div class="dhead" style="${isT?`color:${m.color}`:''}">
-        ${dl} <span style="font-weight:400;font-size:.6rem">${fmtS(day.date)}</span>
+      style="${isT?`border-color:${m.color};`:''}${day.isPast?'opacity:.75;background:#FFF8F8;':''}">
+      <div class="dhead" style="${isT?`color:${m.color}`:day.isPast?'color:var(--red)':''}">
+        ${day.isPast?'⚠ ':''} ${dl} <span style="font-weight:400;font-size:.6rem">${fmtS(day.date)}</span>
       </div>`;
 
     if(!day.items.length){
@@ -1085,14 +1090,14 @@ function renderWoche(m){
       const age=dDiff(it.sowing,TODAY);
       const isw=prevS&&prevS!==it.schlag;
       html+=`${isw?`<div style="font-size:.57rem;color:var(--amber);font-weight:700;margin:1px 2px">↕→${it.schlag}</div>`:''}
-      <div class="wcard ${it.isManual?'':''}${it.nacht?'nacht-c':'day-c'} ${!it.isManual&&age>(m.targetDays||7)?'overdue-c':''}"
+      <div class="wcard ${it.isManual?'':''}'day-c' ${!it.isManual&&age>(m.targetDays||7)?'overdue-c':''}"
         style="${it.isManual?'background:var(--bl);color:var(--blue);border-color:var(--blue);':''}"
         data-id="${it.id}" data-mid="${m.id}"
         onmousedown="ddDown(event,'${it.id}','${m.id}')"
         ontouchstart="ddDown(event,'${it.id}','${m.id}')">
         <span class="drag-handle">⠿</span>
         <div class="wk">${it.isManual?'📍 Schlag '+it.schlag:it.kultur.replace(/^\d+\s*/,'')+' S'+it.satz+(it.schlag?' ·'+it.schlag:'')+(it.totalPasses>1?' ('+it.label+')':'')}</div>
-        <div class="wd">${it.flaeche.toFixed(2)} ha${it.nacht?' 🌙':''}${!it.isManual&&age>(m.targetDays||7)?` <b style="color:${it.nacht?'#F09595':'var(--red)'}">`+(age-(m.targetDays||7))+`d ⚠</b>`:''}</div>
+        <div class="wd">${it.flaeche.toFixed(2)} ha · ${age>=0?age+'d':'geplant'}${!it.isManual&&age>(m.targetDays||7)?` <b style="color:var(--red)">⚠ +`+(age-(m.targetDays||7))+`d</b>`:''}</div>
       </div>`;
       prevS=it.schlag;
     });
@@ -1130,7 +1135,7 @@ function renderWoche(m){
         <div class="pk">${b.kultur.replace(/^\d+\s*/,'')} S${b.satz}
           ${also.map(mx=>`<span class="assigned-badge" style="background:${mx.colorLight||'#eee'};color:${mx.color}">${mx.name}</span>`).join('')}
         </div>
-        <div class="pd">${b.schlag} · ${b.flaeche.toFixed(2)} ha${overdue?` · <b>+${age-(m.targetDays||7)}d ⚠</b>`:age>=0?` · ${age}d`:''}${b.nacht?' 🌙':''}</div>
+        <div class="pd">${b.schlag} · ${b.flaeche.toFixed(2)} ha${overdue?` · <b>+${age-(m.targetDays||7)}d ⚠</b>`:age>=0?` · ${age}d`:''}</div>
       </div>`;
     });
   }
