@@ -250,7 +250,7 @@ function render(){
     html+='<button class="fbtn'+(filterKultur===''?' on':'')+'" onclick="filterKultur='';render()">Alle Kulturen</button>';
     allKulturen.forEach(function(k){
       var label=k.replace(/^\d+\s*/,'');
-      html+='<button class="fbtn'+(filterKultur===k?' on':'')+'" onclick="filterKultur=''+k.replace(/'/g,"\'")+''  ;render()">'+label+'</button>';
+      html+='<button class="fbtn'+(filterKultur===k?' on':'')+'" onclick="setFilterKultur(this.dataset.k)" data-k="'+k.replace(/"/g,'&quot;')+'">'  +label+'</button>';
     });
     html+='</div>';
   }
@@ -402,6 +402,11 @@ function render(){
 
   html+='<div style="text-align:center;font-size:.7rem;color:#aaa;margin-top:.5rem">'+filtered.length+' Sätze</div>';
   main.innerHTML=html;
+}
+
+function setFilterKultur(k){
+  filterKultur=k;
+  render();
 }
 
 function selM(id){
