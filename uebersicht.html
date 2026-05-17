@@ -118,8 +118,10 @@ function loadData(){
       if(!rows||!rows.length||!rows[0].data){return;}
       S=fixArr(rows[0].data);
       setDot(false);
-      render();
-    }catch(e){setDot(true);}
+      try{render();}catch(e){
+        document.getElementById('main').innerHTML='<p style="color:red;padding:1rem">Fehler: '+e.message+'</p>';
+      }
+    }catch(e){setDot(true);document.getElementById('main').innerHTML='<p style="color:red;padding:1rem">Parse Fehler: '+e.message+'</p>';}
   };
   xhr.onerror=function(){setDot(true);};
   xhr.send();

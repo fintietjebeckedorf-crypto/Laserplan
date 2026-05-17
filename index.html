@@ -328,6 +328,28 @@ function fixArrays(obj){
   return out;
 }
 
+function fixMachineData(machines){
+  if(!Array.isArray(machines))return [];
+  return machines.map(function(m){
+    if(!m)return m;
+    // Ensure weekPlan values are arrays
+    if(m.weekPlan){
+      Object.keys(m.weekPlan).forEach(function(d){
+        if(!Array.isArray(m.weekPlan[d])){
+          m.weekPlan[d]=Object.values(m.weekPlan[d]||{});
+        }
+      });
+    }
+    // Ensure comp values are objects
+    if(m.comp){
+      Object.keys(m.comp).forEach(function(id){
+        if(Array.isArray(m.comp[id]))m.comp[id]={};
+      });
+    }
+    return m;
+  });
+}
+
 function schlagName(nr){
   if(!nr)return '–';
   const s=String(nr).padStart(4,'0');
@@ -783,12 +805,12 @@ function renderKPIs(m){
   // Assignments: how many batches are assigned to each machine in their weekPlan
   const allAssigned={};
   S.machines.forEach(mx=>{
-    Object.values(mx.weekPlan||{}).flat().forEach(id=>{
+    Object.values(mx.weekPlan||{}).reduce(function(acc,v){return acc.concat(Array.isArray(v)?v:Object.values(v||{}));},[]) .forEach(id=>{
       if(!allAssigned[id])allAssigned[id]=[];
       if(!allAssigned[id].includes(mx.id))allAssigned[id].push(mx.id);
     });
   });
-  const myPlanned=Object.values(m.weekPlan||{}).flat().length;
+  const myPlanned=Object.values(m.weekPlan||{}).reduce(function(acc,v){return acc.concat(Array.isArray(v)?v:Object.values(v||{}));},[]) .length;
 
   document.getElementById('kpiRow').innerHTML=`
     <div class="kpi ${overdueHa>0?'r':'g'}">
@@ -1036,7 +1058,7 @@ function toggleKultur(k){
 function renderWoche(m){
   const plan=getWeekPlan(m);
   const allOpen=getOpen(m);
-  const scheduledIds=new Set(Object.values(m.weekPlan||{}).flat());
+  const scheduledIds=new Set(Object.values(m.weekPlan||{}).reduce(function(acc,v){return acc.concat(Array.isArray(v)?v:Object.values(v||{}));},[]) );
   const pool=allOpen.filter(b=>!scheduledIds.has(b.id));
   const kulturen=[...new Set(allOpen.map(b=>b.kultur))].sort();
 
@@ -1048,7 +1070,7 @@ function renderWoche(m){
   // Other machines planned
   const otherPlanned={};
   S.machines.filter(mx=>mx.id!==m.id).forEach(mx=>{
-    Object.values(mx.weekPlan||{}).flat().forEach(id=>{
+    Object.values(mx.weekPlan||{}).reduce(function(acc,v){return acc.concat(Array.isArray(v)?v:Object.values(v||{}));},[]) .forEach(id=>{
       if(!otherPlanned[id])otherPlanned[id]=[];
       otherPlanned[id].push(mx);
     });
@@ -1942,6 +1964,7 @@ async function sbRead(){
       // Always take remote if it has machines (cloud is source of truth)
       if(remoteHasMachines){
         S=remote;
+        S.machines=fixMachineData(S.machines||[]);
         renderMachineBar();renderAll();syncDot('ok');
         if(!localHasMachines)toast('☁ Daten geladen ✓');
         else toast('☁ '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' aktualisiert');
