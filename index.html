@@ -977,7 +977,31 @@ function getWeekPlan(m){
           pending:true,nacht:false,isManual:true,fieldSwitch:false});
         tHa=Math.round((tHa+f.ha)*100)/100;return;
       }
-      const b=S.batches.find(x=>x.id===id);
+      // Handle pass IDs (e.g. origId__pass0)
+      const passMatch=id.match(/^(.+)__pass(\d+)$/);
+      let b,passIdx=-1;
+      if(passMatch){
+        b=S.batches.find(x=>x.id===passMatch[1]);
+        passIdx=parseInt(passMatch[2]);
+        if(!b)return;
+        // Check if this specific pass is done
+        const pDone=((m.comp||{})[b.id]||{}).passDone||{};
+        if(pDone[passIdx])return;
+        const cfg=(m.passesConfig||{})[b.kultur]||{n:1,days:'7'};
+        const n=parseInt(cfg.n)||1;
+        const daysList=String(cfg.days).split(',').map(d=>parseInt(d.trim())||7);
+        const dueDay=daysList[passIdx]||7;
+        const tgt=m.targetDays||7;
+        const fakeMs=new Date(b.sowing).getTime()+(dueDay-tgt)*86400000;
+        const fakeSow=localDateStr(new Date(fakeMs));
+        const pDoneMap=((m.comp||{})[b.id]||{}).passDone||{};
+        items.push({...b,id,_origId:b.id,_passIdx:passIdx,sowing:fakeSow,
+          passNum:passIdx+1,totalPasses:n,dueDay,
+          _kulturTarget:dueDay,
+          label:`DG ${passIdx+1}/${n} (Tag ${dueDay})`,fieldSwitch:false});
+        tHa=Math.round((tHa+b.flaeche)*100)/100;prevS=b.schlag;return;
+      }
+      b=S.batches.find(x=>x.id===id);
       if(!b||(m.comp||{})[id]?.done)return;
       const isw=prevS&&prevS!==b.schlag;if(isw)sw2++;
       items.push({...b,fieldSwitch:isw});
@@ -1094,7 +1118,7 @@ function renderWoche(m){
       const age=dDiff(it.sowing,TODAY);
       const isw=prevS&&prevS!==it.schlag;
       html+=`${isw?`<div style="font-size:.57rem;color:var(--amber);font-weight:700;margin:1px 2px">↕→${it.schlag}</div>`:''}
-      <div class="wcard ${it.isManual?'':''}'day-c' ${!it.isManual&&age>(b._kulturTarget||it._kulturTarget||(m.targetDays||7))?'overdue-c':''}"
+      <div class="wcard day-c ${!it.isManual&&age>(it._kulturTarget||(m.targetDays||7))?'overdue-c':''}"
         style="${it.isManual?'background:var(--bl);color:var(--blue);border-color:var(--blue);':''}"
         data-id="${it.id}" data-mid="${m.id}"
         onmousedown="ddDown(event,'${it.id}','${m.id}')"
@@ -1384,9 +1408,10 @@ function renderAlle(m){
     const bPassDone=c.passDone||{};
     const bDoneCount=Object.values(bPassDone).filter(Boolean).length;
     const passInfo=bN>1
-      ?`<span style="font-size:.62rem;font-weight:700;margin-left:4px;padding:1px 6px;border-radius:10px;background:${bDoneCount>0?'var(--gl)':'#eee'};color:${bDoneCount>0?'var(--gd)':'#888'}">
-        ${Array.from({length:bN},(_,i)=>bPassDone[i]?'✓':'○').join('')} ${bDoneCount}/${bN} DG
-      </span>`:'';
+      ?`<span style="font-size:.65rem;font-weight:700;margin-left:4px;padding:1px 7px;border-radius:10px;background:${bDoneCount===bN?'var(--gl)':bDoneCount>0?'var(--al)':'#eee'};color:${bDoneCount===bN?'var(--gd)':bDoneCount>0?'var(--amber)':'#888'}">
+        ${bDoneCount}/${bN} DG ${Array.from({length:bN},(_,i)=>bPassDone[i]?'✓':'○').join('')}
+      </span>`
+      :'<span style="font-size:.65rem;color:var(--tm);margin-left:4px">1 DG</span>';
 
     let badge=isDone?'<span class="badge bg2">✓ Fertig</span>'
       :isRun?`<span class="badge bp2">▶ ${m.name}</span>`
