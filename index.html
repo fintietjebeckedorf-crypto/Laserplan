@@ -805,12 +805,12 @@ function renderKPIs(m){
   // Assignments: how many batches are assigned to each machine in their weekPlan
   const allAssigned={};
   S.machines.forEach(mx=>{
-    Object.values(mx.weekPlan||{}).reduce(function(acc,v){return acc.concat(Array.isArray(v)?v:Object.values(v||{}));},[]) .forEach(id=>{
+    Object.values(mx.weekPlan||{}).reduce(function(acc,v){return acc.concat(Array.isArray(v)?v:Object.values(v||{}));},[]).forEach(id=>{
       if(!allAssigned[id])allAssigned[id]=[];
       if(!allAssigned[id].includes(mx.id))allAssigned[id].push(mx.id);
     });
   });
-  const myPlanned=Object.values(m.weekPlan||{}).reduce(function(acc,v){return acc.concat(Array.isArray(v)?v:Object.values(v||{}));},[]) .length;
+  const myPlanned=Object.values(m.weekPlan||{}).reduce(function(acc,v){return acc.concat(Array.isArray(v)?v:Object.values(v||{}));},[]).length;
 
   document.getElementById('kpiRow').innerHTML=`
     <div class="kpi ${overdueHa>0?'r':'g'}">
@@ -1058,7 +1058,7 @@ function toggleKultur(k){
 function renderWoche(m){
   const plan=getWeekPlan(m);
   const allOpen=getOpen(m);
-  const scheduledIds=new Set(Object.values(m.weekPlan||{}).reduce(function(acc,v){return acc.concat(Array.isArray(v)?v:Object.values(v||{}));},[]) );
+  const scheduledIds=new Set(Object.values(m.weekPlan||{}).reduce(function(acc,v){return acc.concat(Array.isArray(v)?v:Object.values(v||{}));},[]));
   const pool=allOpen.filter(b=>!scheduledIds.has(b.id));
   const kulturen=[...new Set(allOpen.map(b=>b.kultur))].sort();
 
@@ -1070,7 +1070,7 @@ function renderWoche(m){
   // Other machines planned
   const otherPlanned={};
   S.machines.filter(mx=>mx.id!==m.id).forEach(mx=>{
-    Object.values(mx.weekPlan||{}).reduce(function(acc,v){return acc.concat(Array.isArray(v)?v:Object.values(v||{}));},[]) .forEach(id=>{
+    Object.values(mx.weekPlan||{}).reduce(function(acc,v){return acc.concat(Array.isArray(v)?v:Object.values(v||{}));},[]).forEach(id=>{
       if(!otherPlanned[id])otherPlanned[id]=[];
       otherPlanned[id].push(mx);
     });
@@ -1828,8 +1828,7 @@ function exportDuengerCSV(){
       }
     });
   });
-  const csv=rows.join('
-');
+  const csv=rows.join('\n');
   const a=document.createElement('a');
   a.href='data:text/csv;charset=utf-8,﻿'+encodeURIComponent(csv);
   a.download='Duenger_Auswertung_'+new Date().toLocaleDateString('de-DE').replace(/\./g,'-')+'.csv';
