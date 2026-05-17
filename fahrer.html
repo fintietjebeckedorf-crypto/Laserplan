@@ -111,6 +111,19 @@ function dDiff(a,b){return Math.round((new Date(b)-new Date(a))/86400000);}
 function addDays(d,n){const r=new Date(d);r.setDate(r.getDate()+n);return r;}
 function fmtDate(d){return new Date(d).toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'});}
 
+function schlagName(nr){
+  if(!nr)return '–';
+  const s=String(nr).padStart(4,'0');
+  // 0001-0009 → Schlag 1-9
+  if(s.startsWith('000')) return 'Schlag '+parseInt(s.slice(3));
+  // 0010-0099 → Schönau 10-99 (but mainly 0011-0019 = Schönau 1-9? No: 0011 = Schönau 1)
+  // Rule: 001X means last digit is the number → Schönau 1-9
+  if(s.startsWith('001')) return 'Schönau '+parseInt(s.slice(3));
+  // 020X → Lessau, last 2 digits = number
+  if(s.startsWith('02'))  return 'Lessau '+parseInt(s.slice(2));
+  return 'Schlag '+parseInt(s);
+}
+
 function fixArrays(obj){
   if(obj===null||obj===undefined)return obj;
   if(Array.isArray(obj))return obj.map(fixArrays);
@@ -322,23 +335,20 @@ function render(){
   const todayStr=localDateStr(targetDate);
   const todayIds=(m.weekPlan||{})[todayStr]||[];
   const dayWord=selectedDay===0?'Heute':'Morgen';
-  
-  if(!todayIds.length){
-    html+=`<div class="empty"><div class="icon">📅</div><div style="font-weight:700;font-size:1.1rem">${dayWord} nichts geplant</div><div style="font-size:.85rem;margin-top:.5rem">Kein Eintrag im Wochenplan</div></div>`;
-    main.innerHTML=html;return;
-  }
+  const dayLabel=targetDate.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'2-digit'});
 
-  const dayLabel=selectedDay===0
-    ?new Date().toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'2-digit'})
-    :addDays(TODAY,1).toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'2-digit'});
-
+  // Day selector always visible
   html+=`<div style="display:flex;gap:8px;margin-bottom:.85rem;">
     <button onclick="selectDay(0)" style="flex:1;padding:.6rem;border-radius:10px;border:2px solid ${selectedDay===0?m.color:'#D3D1C7'};background:${selectedDay===0?m.color:'#fff'};color:${selectedDay===0?'#fff':'#2C2C2A'};font-size:.9rem;font-weight:700;cursor:pointer;">Heute</button>
     <button onclick="selectDay(1)" style="flex:1;padding:.6rem;border-radius:10px;border:2px solid ${selectedDay===1?m.color:'#D3D1C7'};background:${selectedDay===1?m.color:'#fff'};color:${selectedDay===1?'#fff':'#2C2C2A'};font-size:.9rem;font-weight:700;cursor:pointer;">Morgen</button>
   </div>
   <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#888;margin-bottom:.5rem">${dayLabel}</div>`;
 
-  todayIds.forEach(id=>{
+  if(!todayIds.length){
+    html+=`<div class="empty"><div class="icon">📅</div><div style="font-weight:700;font-size:1.1rem">${dayWord} nichts geplant</div></div>`;
+    main.innerHTML=html;return;
+  }
+
     const origId=id.replace(/__pass\d+$/,'');
     const b=S.batches.find(x=>x.id===origId);
     if(!b)return;
@@ -397,8 +407,8 @@ function renderCard(b,m,isOverdue){
   
   return `<div class="batch-card ${overdue?'overdue':''} ${isDone?'done-card':''}">
     <div class="batch-body">
-      <div class="batch-kultur">${b.kultur}${b.label?' · '+b.label:''}</div>
-      <div class="batch-title">Satz ${b.satz} – Schlag ${b.schlag||'–'}</div>
+      <div class="batch-kultur" style="font-size:1rem;font-weight:600;color:#2C2C2A;margin-bottom:4px">${b.kultur}${b.label?' · '+b.label:''}</div>
+      <div class="batch-title">Satz ${b.satz} – ${schlagName(b.schlag)}</div>
       <div class="batch-meta">
         <span>${b.flaeche?.toFixed(2)} ha</span>
       </div>
