@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Satzübersicht</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Übersicht">
+<meta name="theme-color" content="#172015">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,sans-serif;background:#F4F3EF;color:#2C2C2A;font-size:15px;}
+header{background:#172015;color:#fff;padding:calc(.8rem + env(safe-area-inset-top)) 1rem .8rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+header h1{font-size:.95rem;font-weight:700;}
+.dot{width:9px;height:9px;border-radius:50%;background:#9FE1CB;display:inline-block;margin-left:5px;vertical-align:middle;}
+.dot.e{background:#E24B4A;}
+.rbtn{background:rgba(255,255,255,.15);border:none;color:#9FE1CB;padding:.3rem .6rem;border-radius:20px;font-size:.75rem;cursor:pointer;}
+.main{padding:.75rem;}
+
+/* Filter bar */
+.filters{display:flex;gap:6px;margin-bottom:.75rem;overflow-x:auto;padding-bottom:2px;}
+.filters::-webkit-scrollbar{display:none;}
+.fbtn{padding:5px 12px;border-radius:20px;border:1.5px solid #D3D1C7;background:#fff;font-size:.75rem;font-weight:600;white-space:nowrap;cursor:pointer;flex-shrink:0;}
+.fbtn.on{background:#172015;color:#9FE1CB;border-color:#172015;}
+
+/* Machine selector */
+.msec{margin-bottom:.75rem;}
+.mlbl{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#888;margin-bottom:.3rem;}
+.mrow{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;}
+.mrow::-webkit-scrollbar{display:none;}
+.mbtn{padding:5px 14px;border-radius:20px;border:2px solid #ccc;background:#fff;font-size:.8rem;font-weight:700;white-space:nowrap;cursor:pointer;flex-shrink:0;}
+.mbtn.on{color:#fff;}
+
+/* Batch cards */
+.batch{background:#fff;border-radius:10px;border:.5px solid #D3D1C7;border-left:4px solid #639922;margin-bottom:.5rem;padding:.7rem .85rem;display:grid;grid-template-columns:1fr auto;gap:.3rem .5rem;align-items:start;}
+.batch.overdue{border-left-color:#A32D2D;background:#FFF8F8;}
+.batch.due{border-left-color:#EF9F27;}
+.batch.done{opacity:.45;border-left-color:#aaa;}
+.bkultur{font-size:.72rem;color:#888;grid-column:1;}
+.btitle{font-size:.92rem;font-weight:700;grid-column:1;}
+.bmeta{font-size:.72rem;color:#666;grid-column:1;display:flex;gap:6px;flex-wrap:wrap;margin-top:2px;}
+.bstatus{font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:20px;grid-column:2;grid-row:1/3;align-self:center;white-space:nowrap;}
+.ok{background:#EAF3DE;color:#27500A;}
+.warn{background:#FAEEDA;color:#BA7517;}
+.over{background:#FCEBEB;color:#A32D2D;}
+.done-badge{background:#eee;color:#888;}
+.plan-row{grid-column:1/-1;display:flex;gap:6px;align-items:center;margin-top:4px;}
+.plan-row input[type=date]{flex:1;padding:4px 8px;border:.5px solid #D3D1C7;border-radius:8px;font-size:.75rem;background:#F4F3EF;}
+.plan-btn{padding:4px 12px;border:none;border-radius:8px;background:#172015;color:#9FE1CB;font-size:.75rem;font-weight:700;cursor:pointer;}
+.plan-badge{font-size:.68rem;color:#639922;font-weight:600;}
+
+.empty{text-align:center;padding:3rem 1rem;color:#888;}
+.ei{font-size:2.5rem;margin-bottom:.4rem;}
+
+/* Search */
+.search{width:100%;padding:.5rem .75rem;border:.5px solid #D3D1C7;border-radius:20px;font-size:.85rem;margin-bottom:.6rem;background:#fff;}
+</style>
+</head>
+<body>
+<header>
+  <h1>📋 Satzübersicht <span class="dot" id="dot"></span></h1>
+  <button class="rbtn" onclick="loadData()">↻</button>
+</header>
+<div class="main" id="main">
+  <p style="color:#888;text-align:center;padding:2rem">Wird geladen...</p>
+</div>
+
+<script>
+var SB_URL='https://lcxvknjhbxhgfkdfwloo.supabase.co';
+var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxjeHZrbmpoYnhoZ2ZrZGZ3bG9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MzQxMzYsImV4cCI6MjA5NDQxMDEzNn0.XS2bKx-_96pEC5aY0lcMzRVwH_ce5xRM6bX86ZbxnaA';
+
+var S=null;
+var selMachine=localStorage.getItem('u_mid')||null;
+var filterStatus='all'; // all, open, due, overdue, done
+var searchText='';
+
+function setDot(e){document.getElementById('dot').className='dot'+(e?' e':'');}
+
+function schlagName(nr){
+  if(!nr)return '-';
+  var s=String(nr);
+  while(s.length<4)s='0'+s;
+  if(s.slice(0,3)==='000')return 'Schlag '+parseInt(s.slice(3));
+  if(s.slice(0,3)==='001')return 'Schönau '+parseInt(s.slice(3));
+  if(s.slice(0,2)==='02')return 'Lessau '+parseInt(s.slice(2));
+  return 'Schlag '+parseInt(s);
+}
+
+function todayDate(){var d=new Date();d.setHours(0,0,0,0);return d;}
+function dateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function dDiff(a,b){return Math.round((new Date(b)-new Date(a))/86400000);}
+
+function fixArr(obj){
+  if(obj===null||obj===undefined)return obj;
+  if(Array.isArray(obj))return obj.map(fixArr);
+  if(typeof obj!=='object')return obj;
+  var keys=Object.keys(obj);
+  if(keys.length>0&&keys.every(function(k){return /^\d+$/.test(k);})){
+    var arr=new Array(Math.max.apply(null,keys.map(Number))+1);
+    keys.forEach(function(k){arr[parseInt(k)]=fixArr(obj[k]);});
+    return arr;
+  }
+  var out={};
+  keys.forEach(function(k){out[k]=fixArr(obj[k]);});
+  return out;
+}
+
+function loadData(){
+  var xhr=new XMLHttpRequest();
+  xhr.open('GET',SB_URL+'/rest/v1/laserplan?id=eq.main&select=data,updated_at',true);
+  xhr.setRequestHeader('apikey',SB_KEY);
+  xhr.setRequestHeader('Authorization','Bearer '+SB_KEY);
+  xhr.onload=function(){
+    if(xhr.status!==200){setDot(true);return;}
+    try{
+      var rows=JSON.parse(xhr.responseText);
+      if(!rows||!rows.length||!rows[0].data){return;}
+      S=fixArr(rows[0].data);
+      setDot(false);
+      render();
+    }catch(e){setDot(true);}
+  };
+  xhr.onerror=function(){setDot(true);};
+  xhr.send();
+}
+
+function saveData(){
+  if(!S)return;
+  S.lastUpdate=new Date().toISOString();
+  var xhr=new XMLHttpRequest();
+  xhr.open('POST',SB_URL+'/rest/v1/laserplan',true);
+  xhr.setRequestHeader('apikey',SB_KEY);
+  xhr.setRequestHeader('Authorization','Bearer '+SB_KEY);
+  xhr.setRequestHeader('Content-Type','application/json');
+  xhr.setRequestHeader('Prefer','resolution=merge-duplicates,return=minimal');
+  xhr.send(JSON.stringify({id:'main',data:S,updated_at:S.lastUpdate}));
+}
+
+function getMachines(){
+  return (Array.isArray(S.machines)?S.machines:Object.values(S.machines||{})).filter(function(m){return m&&m.name;});
+}
+function getMach(id){
+  var ms=getMachines();
+  for(var i=0;i<ms.length;i++){if(ms[i].id===id)return ms[i];}
+  return null;
+}
+function getBatches(){
+  return (Array.isArray(S.batches)?S.batches:Object.values(S.batches||{})).filter(function(b){return b&&b.kultur;});
+}
+
+function getAssigned(bid){
+  // Find which machine+day this batch is planned
+  var ms=getMachines();
+  var result=[];
+  ms.forEach(function(mx){
+    var wp=mx.weekPlan||{};
+    Object.entries(wp).forEach(function(e){
+      var day=e[0], ids=e[1];
+      if(ids&&ids.indexOf(bid)>=0){
+        result.push({machine:mx.name,color:mx.color,day:day});
+      }
+    });
+  });
+  return result;
+}
+
+function planBatch(bid,dateVal){
+  if(!selMachine){alert('Bitte zuerst Maschine auswählen');return;}
+  var m=getMach(selMachine);
+  if(!m)return;
+  if(!m.weekPlan)m.weekPlan={};
+  // Remove from all days first
+  Object.keys(m.weekPlan).forEach(function(d){
+    m.weekPlan[d]=(m.weekPlan[d]||[]).filter(function(x){return x!==bid;});
+    if(!m.weekPlan[d].length)delete m.weekPlan[d];
+  });
+  if(dateVal){
+    if(!m.weekPlan[dateVal])m.weekPlan[dateVal]=[];
+    if(m.weekPlan[dateVal].indexOf(bid)<0)m.weekPlan[dateVal].push(bid);
+  }
+  saveData();
+  render();
+}
+
+function render(){
+  var main=document.getElementById('main');
+  if(!S){main.innerHTML='<div class="empty"><div class="ei">⏳</div>Wird geladen...</div>';return;}
+
+  var ms=getMachines();
+  var batches=getBatches();
+  var today=todayDate();
+  var tStr=dateStr(today);
+  var m=getMach(selMachine);
+
+  var html='';
+
+  // Machine selector
+  html+='<div class="msec">';
+  html+='<div class="mlbl">Maschine für Einplanung</div>';
+  html+='<div class="mrow">';
+  ms.forEach(function(mx){
+    var on=mx.id===selMachine;
+    html+='<button class="mbtn'+(on?' on':'')+'" style="border-color:'+mx.color+';'+(on?'background:'+mx.color+';':'')+'" onclick="selM(\''+mx.id+'\')">'+mx.name+'</button>';
+  });
+  html+='</div></div>';
+
+  // Search
+  html+='<input class="search" type="search" placeholder="🔍 Suche..." value="'+searchText+'" oninput="searchText=this.value;render()" />';
+
+  // Status filters
+  html+='<div class="filters">';
+  var filters=[['all','Alle'],['open','Offen'],['due','Fällig'],['overdue','Überfällig'],['done','Fertig']];
+  filters.forEach(function(f){
+    html+='<button class="fbtn'+(filterStatus===f[0]?' on':'')+'" onclick="filterStatus=\''+f[0]+'\';render()">'+f[1]+'</button>';
+  });
+  html+='</div>';
+
+  // Filter and sort batches
+  var filtered=batches.filter(function(b){
+    // Search filter
+    if(searchText){
+      var q=searchText.toLowerCase();
+      if(b.kultur.toLowerCase().indexOf(q)<0&&String(b.satz).indexOf(q)<0&&schlagName(b.schlag).toLowerCase().indexOf(q)<0)return false;
+    }
+    // Status filter
+    var comp=m?(m.comp||{})[b.id]||{}:{};
+    var isDone=!!comp.done;
+    var age=dDiff(b.sowing,today);
+    var tgt=m?(m.targetDays||7):7;
+    var overdue=!isDone&&age>tgt;
+    var due=!isDone&&age>=0&&age<=tgt;
+    var open=b.pending&&!isDone;
+    if(filterStatus==='done')return isDone;
+    if(filterStatus==='overdue')return overdue;
+    if(filterStatus==='due')return due&&age>=tgt-2;
+    if(filterStatus==='open')return open;
+    return true;
+  });
+
+  // Sort: overdue first, then by age desc
+  filtered.sort(function(a,b){
+    var ca=m?(m.comp||{})[a.id]||{}:{};
+    var cb=m?(m.comp||{})[b.id]||{}:{};
+    var ageA=dDiff(a.sowing,today);
+    var ageB=dDiff(b.sowing,today);
+    return ageB-ageA;
+  });
+
+  if(!filtered.length){
+    html+='<div class="empty"><div class="ei">📭</div>Keine Sätze gefunden</div>';
+    main.innerHTML=html;return;
+  }
+
+  filtered.forEach(function(b){
+    var comp=m?(m.comp||{})[b.id]||{}:{};
+    var isDone=!!comp.done;
+    var age=dDiff(b.sowing,today);
+    var tgt=m?(m.targetDays||7):7;
+    var overdue=!isDone&&age>tgt;
+    var dueSoon=!isDone&&age>=tgt-2&&age<=tgt;
+
+    var statusClass='done-badge';
+    var statusText='Fertig';
+    if(!isDone){
+      if(overdue){statusClass='over';statusText='⚠ +' +(age-tgt)+'d';}
+      else if(age===tgt){statusClass='warn';statusText='Heute fällig';}
+      else if(dueSoon){statusClass='warn';statusText='in '+(tgt-age)+'d';}
+      else if(age>=0){statusClass='ok';statusText=age+'d alt';}
+      else{statusClass='ok';statusText='geplant';}
+    }
+
+    var cls='batch'+(isDone?' done':overdue?' overdue':dueSoon?' due':'');
+
+    // Find planned date for this batch with selected machine
+    var plannedDay='';
+    if(m){
+      var wp=m.weekPlan||{};
+      Object.keys(wp).forEach(function(d){
+        if((wp[d]||[]).indexOf(b.id)>=0)plannedDay=d;
+      });
+    }
+
+    var assigned=getAssigned(b.id);
+    var assignedStr=assigned.map(function(a){
+      var d=new Date(a.day);
+      return a.machine+' '+d.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'});
+    }).join(', ');
+
+    html+='<div class="'+cls+'">';
+    html+='<div class="bkultur">'+b.kultur+'</div>';
+    html+='<div class="bstatus '+statusClass+'">'+statusText+'</div>';
+    html+='<div class="btitle">S'+b.satz+' &ndash; '+schlagName(b.schlag)+'</div>';
+    html+='<div class="bmeta">';
+    html+='<span>'+b.flaeche.toFixed(2)+' ha</span>';
+    if(age>=0)html+='<span>'+age+'d alt</span>';
+    if(assignedStr)html+='<span style="color:#639922">📅 '+assignedStr+'</span>';
+    html+='</div>';
+    if(!isDone){
+      html+='<div class="plan-row">';
+      html+='<input type="date" value="'+plannedDay+'" onchange="planBatch(\''+b.id+'\',this.value)" />';
+      if(plannedDay)html+='<span class="plan-badge">✓ eingeplant</span>';
+      html+='</div>';
+    }
+    html+='</div>';
+  });
+
+  html+='<div style="text-align:center;font-size:.7rem;color:#aaa;margin-top:.5rem">'+filtered.length+' Sätze</div>';
+  main.innerHTML=html;
+}
+
+function selM(id){
+  selMachine=id;
+  localStorage.setItem('u_mid',id);
+  render();
+}
+
+loadData();
+setInterval(loadData,15000);
+</script>
+</body>
+</html>
