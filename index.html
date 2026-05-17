@@ -783,7 +783,7 @@ function renderKPIs(m){
   // Assignments: how many batches are assigned to each machine in their weekPlan
   const allAssigned={};
   S.machines.forEach(mx=>{
-    Object.values(mx.weekPlan).flat().forEach(id=>{
+    Object.values(mx.weekPlan||{}).flat().forEach(id=>{
       if(!allAssigned[id])allAssigned[id]=[];
       if(!allAssigned[id].includes(mx.id))allAssigned[id].push(mx.id);
     });
@@ -1048,7 +1048,7 @@ function renderWoche(m){
   // Other machines planned
   const otherPlanned={};
   S.machines.filter(mx=>mx.id!==m.id).forEach(mx=>{
-    Object.values(mx.weekPlan).flat().forEach(id=>{
+    Object.values(mx.weekPlan||{}).flat().forEach(id=>{
       if(!otherPlanned[id])otherPlanned[id]=[];
       otherPlanned[id].push(mx);
     });
