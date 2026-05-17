@@ -161,11 +161,9 @@ async function loadData(){
     const rows=await r.json();
     if(!rows||!rows.length||!rows[0].data){syncDot('ok');render();return;}
     const newTs=rows[0].updated_at||'';
-    if(newTs!==lastServerTs){
-      lastServerTs=newTs;
-      S=fixArrays(rows[0].data);
-      render();
-    }
+    lastServerTs=newTs;
+    S=fixArrays(rows[0].data);
+    render();
     syncDot('ok');
   }catch(e){
     syncDot('error');
