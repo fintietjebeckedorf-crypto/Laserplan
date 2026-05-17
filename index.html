@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Laserroboter Maschinenplanung 2026</title>
+<title>Maschinenplanung 2026</title>
 <!-- PWA -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -212,7 +212,7 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
 
 <header>
   <div>
-    <h1>🌿 Laserroboter Maschinenplanung 2026 <span class="sync-dot" id="syncDot" onclick="sbRead()" style="cursor:pointer" title="Tippen zum Aktualisieren"></span></h1>
+    <h1>🌿 Maschinenplanung 2026 <span class="sync-dot" id="syncDot" onclick="sbRead()" style="cursor:pointer" title="Tippen zum Aktualisieren"></span></h1>
     <div class="sub">Mehrmaschinen-Planung · Drag &amp; Drop · 7-Tage-Rhythmus</div>
   </div>
   <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
@@ -231,6 +231,7 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
 <div class="tabs">
   <div class="tab active" onclick="swTab('woche',this)">📅 Wochenplan</div>
   <div class="tab" onclick="swTab('alle',this)">📋 Alle Sätze</div>
+  <div class="tab" onclick="swTab('auswertung',this)">📊 Auswertung</div>
 </div>
 
 <div class="main">
@@ -269,6 +270,10 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
         </div>
         <div id="mPassesList" style="max-height:200px;overflow-y:auto;"></div>
       </div>
+    </div>
+    <div class="form-row" style="display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="mDuenger" style="width:18px;height:18px;accent-color:var(--gm)">
+      <label for="mDuenger" style="margin:0;font-weight:600">Dünger erforderlich bei dieser Maschine</label>
     </div>
     <div class="form-row">
       <label>Manuelle Feldaufgaben (ohne Sätze) – optional</label>
@@ -666,6 +671,7 @@ function saveModal(){
       const days=row.querySelector('.pc-days').value||'7';
       passesConfig[k]={n,days};
     });
+    m.duenger=document.getElementById('mDuenger').checked;
     m.name=name;m.cap=cap;m.targetDays=tgt;m.passesConfig=passesConfig;m.colorIdx=selectedColor;
     m.color=MC[selectedColor%MC.length];m.colorLight=MCL[selectedColor%MCL.length];
     m.kulturen=finalKult;
@@ -709,6 +715,14 @@ function getManualFields(){
     schlag: div.querySelector('.mf-schlag').value.trim(),
     ha: parseFloat(div.querySelector('.mf-ha').value)||0
   })).filter(f=>f.schlag&&f.ha>0);
+}
+
+function setDuenger(mid,id,field,val){
+  const m=getMachine(mid);if(!m)return;
+  if(!m.duengerData)m.duengerData={};
+  if(!m.duengerData[id])m.duengerData[id]={};
+  m.duengerData[id][field]=val;
+  save();
 }
 
 function doneManualField(mid, idx){
@@ -814,7 +828,8 @@ function swTab(name,el){
 function renderTab(n,m){
   if(n==='heute')renderHeute(m);
   else if(n==='woche')renderWoche(m);
-  else renderAlle(m);
+  else if(n==='alle')renderAlle(m);
+  else if(n==='auswertung')renderAuswertung(m);
 }
 
 /* ── TAB 1: HEUTE ── */
@@ -1210,6 +1225,14 @@ function renderWoche(m){
             ontouchstart="ddDown(event,'manual_${i}','${m.id}')">
             <div class="pk">📍 ${schlagName(f.schlag)}</div>
             <div class="pd">${f.ha.toFixed(2)} ha · ca. ${(f.ha/0.2).toFixed(0)}h</div>
+            ${m.duenger?`<div style="display:flex;gap:4px;margin-top:3px;" onclick="event.stopPropagation()">
+              <input type="text" placeholder="Düngerart" value="${(m.duengerData||{})['manual_'+i]?.art||''}"
+                onchange="setDuenger('${m.id}','manual_'+i,'art',this.value)"
+                style="flex:1;font-size:.62rem;padding:2px 4px;border:.5px solid var(--border);border-radius:4px;color:#333;">
+              <input type="number" placeholder="kg/ha" value="${(m.duengerData||{})['manual_'+i]?.menge||''}"
+                onchange="setDuenger('${m.id}','manual_'+i,'menge',this.value)"
+                style="width:55px;font-size:.62rem;padding:2px 4px;border:.5px solid var(--border);border-radius:4px;color:#333;">
+            </div>`:''}
           </div>
           <button class="btn p" style="font-size:.65rem;padding:2px 6px;"
             onclick="doneManualField('${m.id}',${i})">✓ Fertig</button>
@@ -1424,7 +1447,7 @@ function renderAlle(m){
       <option value="all">Alle Kulturen</option>
       ${kulturen.map(k=>`<option value="${k}" ${fKu===k?'selected':''}>${k}</option>`).join('')}
     </select>
-    <button class="btn dr" onclick="deleteAllDone()" style="margin-left:auto;font-size:.7rem">🗑 Fertige löschen</button>
+    <button class="btn dr" onclick="deleteAllDone()" style="font-size:.7rem">🗑 Fertige löschen</button>
     <button class="btn dr" onclick="deleteAllBatches()" style="font-size:.7rem">🗑 Alle löschen</button>
   </div>`;
 
@@ -1610,6 +1633,194 @@ function exportCSV(){
   a.download=`Laserplan_${m.name.replace(/\s/g,'_')}_${Tstr}.csv`;a.click();toast('CSV exportiert');
 }
 
+
+function renderAuswertung(m){
+  const tc=document.getElementById('tc');
+
+  // ── Dünger-Auswertung ──────────────────────────────────────
+  const duengerRows=[];
+  S.machines.forEach(mx=>{
+    if(!mx.duenger)return;
+    const dd=mx.duengerData||{};
+    Object.entries(dd).forEach(([id,d])=>{
+      if(!d.art&&!d.menge)return;
+      const isManual=id.startsWith('manual_');
+      if(isManual){
+        const fi=parseInt(id.replace('manual_',''));
+        const f=(mx.manualFields||[])[fi];
+        if(!f)return;
+        const done=!!(mx.manualFieldsDone||[]).includes(fi);
+        duengerRows.push({maschine:mx.name,kultur:'Manuell',satz:'–',schlag:schlagName(f.schlag),ha:f.ha,art:d.art||'–',menge:d.menge||'–',datum:done?'erledigt':'offen'});
+      } else {
+        const origId=id.replace(/__pass\d+$/,'');
+        const b=(Array.isArray(S.batches)?S.batches:Object.values(S.batches||[])).find(x=>x&&x.id===origId);
+        if(!b)return;
+        const comp=(mx.comp||{})[origId]||{};
+        duengerRows.push({maschine:mx.name,kultur:b.kultur,satz:b.satz,schlag:schlagName(b.schlag),ha:b.flaeche,art:d.art||'–',menge:d.menge||'–',datum:comp.doneDate||'offen'});
+      }
+    });
+  });
+
+  const duengerTbl=duengerRows.length
+    ?`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.78rem">
+      <thead><tr style="background:#172015;color:#9FE1CB">
+        <th style="padding:6px 8px;text-align:left">Maschine</th>
+        <th style="padding:6px 8px;text-align:left">Kultur</th>
+        <th style="padding:6px 8px;text-align:left">Satz</th>
+        <th style="padding:6px 8px;text-align:left">Schlag</th>
+        <th style="padding:6px 8px;text-align:left">ha</th>
+        <th style="padding:6px 8px;text-align:left">Düngerart</th>
+        <th style="padding:6px 8px;text-align:left">Menge</th>
+        <th style="padding:6px 8px;text-align:left">Datum</th>
+      </tr></thead>
+      <tbody>${duengerRows.map(r=>`<tr style="border-bottom:.5px solid var(--border)">
+        <td style="padding:5px 8px">${r.maschine}</td>
+        <td style="padding:5px 8px">${r.kultur}</td>
+        <td style="padding:5px 8px">${r.satz}</td>
+        <td style="padding:5px 8px">${r.schlag}</td>
+        <td style="padding:5px 8px">${r.ha?.toFixed?.(2)||r.ha}</td>
+        <td style="padding:5px 8px"><b>${r.art}</b></td>
+        <td style="padding:5px 8px">${r.menge!=='–'?r.menge+' kg/ha':r.menge}</td>
+        <td style="padding:5px 8px">${r.datum}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`
+    :'<div style="color:var(--tm);font-size:.85rem;padding:.5rem 0">Noch keine Dünger-Einträge vorhanden</div>';
+
+  tc.innerHTML=`
+    <div style="padding:.5rem 0 1rem">
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
+        <h2 style="font-size:.95rem;font-weight:700">🌱 Dünger-Auswertung</h2>
+        <button onclick="exportDuengerCSV()" class="btn" style="font-size:.72rem;background:var(--gl);color:var(--gd)">↓ CSV</button>
+      </div>
+      ${duengerTbl}
+
+    </div>`;
+}
+
+function showDuengerReport(){
+  // Collect all dünger data from all machines
+  const rows=[];
+  S.machines.forEach(mx=>{
+    if(!mx.duenger)return;
+    const dd=mx.duengerData||{};
+    // Regular batches
+    Object.entries(dd).forEach(([id,d])=>{
+      if(!d.art&&!d.menge)return;
+      const isManual=id.startsWith('manual_');
+      if(isManual){
+        const fi=parseInt(id.replace('manual_',''));
+        const f=(mx.manualFields||[])[fi];
+        if(!f)return;
+        const comp=mx.comp||{};
+        const done=!!(mx.manualFieldsDone||[]).includes(fi);
+        rows.push({
+          maschine:mx.name,
+          kultur:'Manuelle Feldaufgabe',
+          satz:'–',
+          schlag:schlagName(f.schlag),
+          ha:f.ha,
+          art:d.art||'–',
+          menge:d.menge||'–',
+          datum:done?'erledigt':'offen'
+        });
+      } else {
+        const origId=id.replace(/__pass\d+$/,'');
+        const b=(Array.isArray(S.batches)?S.batches:Object.values(S.batches||[])).find(x=>x&&x.id===origId);
+        if(!b)return;
+        const comp=(mx.comp||{})[origId]||{};
+        rows.push({
+          maschine:mx.name,
+          kultur:b.kultur,
+          satz:b.satz,
+          schlag:schlagName(b.schlag),
+          ha:b.flaeche,
+          art:d.art||'–',
+          menge:d.menge||'–',
+          datum:comp.doneDate||'offen'
+        });
+      }
+    });
+  });
+
+  if(!rows.length){toast('Keine Dünger-Einträge vorhanden');return;}
+
+  // Build modal with table + CSV export
+  const tbl=rows.map(r=>`<tr>
+    <td>${r.maschine}</td>
+    <td>${r.kultur}</td>
+    <td>${r.satz}</td>
+    <td>${r.schlag}</td>
+    <td>${r.ha?.toFixed?.(2)||r.ha}</td>
+    <td><b>${r.art}</b></td>
+    <td>${r.menge}${r.menge!=='–'?' kg/ha':''}</td>
+    <td>${r.datum}</td>
+  </tr>`).join('');
+
+  const html=`<div style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;overflow-y:auto;padding:1rem">
+    <div style="background:#fff;border-radius:12px;max-width:900px;margin:0 auto;padding:1.2rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+        <h2 style="font-size:1rem;font-weight:700">📊 Dünger-Auswertung</h2>
+        <div style="display:flex;gap:8px">
+          <button onclick="exportDuengerCSV()" class="btn" style="font-size:.75rem;background:var(--gl);color:var(--gd)">↓ CSV Export</button>
+          <button onclick="this.closest('div[style*=fixed]').remove()" class="btn dr" style="font-size:.75rem">✕ Schließen</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:.78rem">
+          <thead><tr style="background:#172015;color:#9FE1CB">
+            <th style="padding:6px 8px;text-align:left">Maschine</th>
+            <th style="padding:6px 8px;text-align:left">Kultur</th>
+            <th style="padding:6px 8px;text-align:left">Satz</th>
+            <th style="padding:6px 8px;text-align:left">Schlag</th>
+            <th style="padding:6px 8px;text-align:left">ha</th>
+            <th style="padding:6px 8px;text-align:left">Düngerart</th>
+            <th style="padding:6px 8px;text-align:left">Menge</th>
+            <th style="padding:6px 8px;text-align:left">Datum</th>
+          </tr></thead>
+          <tbody>${tbl}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+
+  const div=document.createElement('div');
+  div.innerHTML=html;
+  document.body.appendChild(div.firstChild);
+}
+
+function exportDuengerCSV(){
+  const rows=[];
+  rows.push(['Maschine','Kultur','Satz','Schlag','ha','Düngerart','Menge kg/ha','Datum'].join(';'));
+  S.machines.forEach(mx=>{
+    if(!mx.duenger)return;
+    const dd=mx.duengerData||{};
+    Object.entries(dd).forEach(([id,d])=>{
+      if(!d.art&&!d.menge)return;
+      const isManual=id.startsWith('manual_');
+      if(isManual){
+        const fi=parseInt(id.replace('manual_',''));
+        const f=(mx.manualFields||[])[fi];
+        if(!f)return;
+        const done=!!(mx.manualFieldsDone||[]).includes(fi);
+        rows.push([mx.name,'Manuelle Feldaufgabe','–',schlagName(f.schlag),f.ha,d.art||'',d.menge||'',done?'erledigt':'offen'].join(';'));
+      } else {
+        const origId=id.replace(/__pass\d+$/,'');
+        const b=(Array.isArray(S.batches)?S.batches:Object.values(S.batches||[])).find(x=>x&&x.id===origId);
+        if(!b)return;
+        const comp=(mx.comp||{})[origId]||{};
+        rows.push([mx.name,b.kultur,b.satz,schlagName(b.schlag),b.flaeche,d.art||'',d.menge||'',comp.doneDate||'offen'].join(';'));
+      }
+    });
+  });
+  const csv=rows.join('
+');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,﻿'+encodeURIComponent(csv);
+  a.download='Duenger_Auswertung_'+new Date().toLocaleDateString('de-DE').replace(/\./g,'-')+'.csv';
+  a.click();
+  toast('CSV exportiert ✓');
+}
 
 function deleteAllDone(){
   const doneIds=new Set();

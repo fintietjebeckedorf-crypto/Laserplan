@@ -79,6 +79,13 @@ function fixArr(obj){
   return out;
 }
 
+function doneManual(mid,idx){
+  var m=getMach(mid);if(!m)return;
+  if(!m.manualFieldsDone)m.manualFieldsDone=[];
+  if(m.manualFieldsDone.indexOf(idx)<0)m.manualFieldsDone.push(idx);
+  saveData();render();
+}
+
 function loadData(){
   var xhr=new XMLHttpRequest();
   xhr.open('GET',SB_URL+'/rest/v1/laserplan?id=eq.main&select=data,updated_at',true);
@@ -170,6 +177,29 @@ function render(){
     main.innerHTML=html;return;
   }
   ids.forEach(function(id){
+    // Handle manual field IDs (manual_0, manual_1 etc)
+    var manMatch=id.match(/^manual_(\d+)$/);
+    if(manMatch){
+      var fi=parseInt(manMatch[1]);
+      var mf=(m.manualFields||[])[fi];
+      var mfDone=(m.manualFieldsDone||[]);
+      if(!mf||mfDone.indexOf(fi)>=0)return;
+      html+='<div class="card">';
+      html+='<div class="cbody">';
+      html+='<div class="ck">Manuelle Feldaufgabe</div>';
+      html+='<div class="ct">'+schlagName(mf.schlag)+'</div>';
+      html+='<div class="cm">'+(mf.ha?mf.ha.toFixed(2)+' ha':'')+'</div>';
+      html+='</div>';
+      var mdd=(m.duengerData||{})['manual_'+fi]||{};
+      if(m.duenger&&(mdd.art||mdd.menge)){
+        html+='<div class="cm" style="margin-top:3px;padding:3px 6px;background:#EAF3DE;border-radius:4px;color:#27500A;font-weight:600">';
+        html+='Duenger: '+(mdd.art||'')+' '+(mdd.menge?mdd.menge+' kg/ha':'');
+        html+='</div>';
+      }
+      html+='<button class="fbtn do" onclick="doneManual(''+m.id+'','+fi+')">Fertig</button>';
+      html+='</div>';
+      return;
+    }
     var origId=id.replace(/__pass\d+$/,'');
     var b=findBatch(origId);
     if(!b)return;
@@ -194,6 +224,12 @@ function render(){
     html+='<div class="ck">'+b.kultur+(pi>=0?' DG'+(pi+1)+'/'+n:'')+'</div>';
     html+='<div class="ct">Satz '+b.satz+' - '+schlagName(b.schlag)+'</div>';
     html+='<div class="cm">'+(b.flaeche?b.flaeche.toFixed(2)+' ha':'')+'</div>';
+    var dd=(m.duengerData||{})[origId]||{};
+    if(m.duenger&&(dd.art||dd.menge)){
+      html+='<div class="cm" style="margin-top:3px;padding:3px 6px;background:#EAF3DE;border-radius:4px;color:#27500A;font-weight:600">';
+      html+='Duenger: '+(dd.art||'')+' '+(dd.menge?dd.menge+' kg/ha':'');
+      html+='</div>';
+    }
     html+=passHtml;
     html+='</div>';
     html+='<button class="fbtn do" onclick="markDone(\''+m.id+'\',\''+btnId+'\')">Fertig: '+btnLbl+'</button>';
