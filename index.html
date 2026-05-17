@@ -229,8 +229,7 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
 
 <!-- Tabs -->
 <div class="tabs">
-  <div class="tab active" onclick="swTab('heute',this)">📍 Heute</div>
-  <div class="tab" onclick="swTab('woche',this)">📅 Wochenplan</div>
+  <div class="tab active" onclick="swTab('woche',this)">📅 Wochenplan</div>
   <div class="tab" onclick="swTab('alle',this)">📋 Alle Sätze</div>
 </div>
 
@@ -338,7 +337,7 @@ function save(){
 }
 let S=loadState();
 
-let activeTab='heute';
+let activeTab='woche';
 let wKulturHide=new Set();
 let modalMid=null,selectedColor=0;
 
@@ -522,9 +521,12 @@ function getOpen(m){
         const sowDate=new Date(b.sowing);
         const comp=(m.comp||{})[b.id]||{};
         const passDone=comp.passDone||{};
+        // Only show the NEXT pending pass (not all at once)
+        let shownNextPass=false;
         for(let p=0;p<n;p++){
-          // Skip if this specific pass is already done
-          if(passDone[p])continue;
+          if(passDone[p])continue; // skip done passes
+          if(shownNextPass)break;  // only show first pending pass
+          shownNextPass=true;
           const dueDay=daysList[p]||7;
           const fakeMs=sowDate.getTime()+(dueDay-tgt)*86400000;
           const fakeSowStr=localDateStr(new Date(fakeMs));
@@ -825,37 +827,23 @@ function renderHeute(m){
   const otherMachines=S.machines.filter(mx=>mx.id!==m.id);
 
   let nowHtml='';
-  if(runActive){
-    const c=m.comp[runB.id]||{};const lasered=c.haLasered||0;
-    const pct=Math.min(100,Math.round(lasered/runB.flaeche*100));
-    const haLeft=Math.round((runB.flaeche-lasered)*100)/100;
-    const age=dDiff(runB.sowing,TODAY);
-    nowHtml=`<div class="now-card" style="border-left-color:${m.color}">
-      <div class="card-lbl" style="color:${m.color}">▶ ${m.name} – läuft gerade</div>
-      <div class="now-k">${runB.kultur} – Satz ${runB.satz}</div>
-      <div class="now-d">Pflanzung: ${fmtL(runB.sowing)} · ${age} Tage alt</div>
-      <div class="spill" style="background:${m.colorLight||'var(--gl)'};color:${m.color}">📍 Schlag ${runB.schlag||'–'}${runB.nacht?' 🌙':''}</div>
-      <div style="font-size:.78rem;margin-top:6px"><strong>${lasered.toFixed(2)}</strong> / <strong>${runB.flaeche.toFixed(2)} ha</strong> · ~<strong>${(haLeft/0.2).toFixed(1)} h</strong></div>
-      <div class="pbar-wrap"><div class="pbar"><div class="pfill" style="width:${pct}%;background:${m.color}"></div></div>
-      <div class="plbl"><span>${pct}%</span><span>${haLeft} ha offen</span></div></div>
-      <div style="margin-top:8px;display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
-        <label style="font-size:.72rem;color:var(--tm)">Gelasert:</label>
-        <input type="number" step="0.05" min="0" max="${runB.flaeche}" value="${lasered.toFixed(2)}" style="width:70px" onchange="setHa('${m.id}','${runB.id}',this.value)">
-        <button class="btn p" style="background:${m.color}" onclick="doneMark('${m.id}','${runB.id}')">✓ Fertig</button>
-      </div></div>`;
-  } else {
+  {
     // Pick first from today's plan, or fall back to oldest open
     const todayFirstId=((m.weekPlan||{})[ds(TODAY)]||[]).find(id=>!(m.comp||{})[id]?.done);
     const first=todayFirstId?S.batches.find(b=>b.id===todayFirstId):open[0];
     if(first){
       const age=dDiff(first.sowing,TODAY);
+      const fCfg=(m.passesConfig||{})[first.kultur]||{n:1,days:'7'};
+      const fN=parseInt(fCfg.n)||1;
+      const fPassDone=((m.comp||{})[first._origId||first.id]||{}).passDone||{};
+      const fDoneCount=Object.values(fPassDone).filter(Boolean).length;
+      const fPassInfo=fN>1?` · ${fDoneCount}/${fN} DG ${Array.from({length:fN},(_,i)=>fPassDone[i]?'✓':'○').join('')}`:'';
       nowHtml=`<div class="now-card" style="border-left-color:${m.color}">
         <div class="card-lbl" style="color:${m.color}">${m.name} – nächster Satz</div>
-        <div class="now-k">${first.kultur} – Satz ${first.satz}</div>
-        <div class="now-d">Pflanzung: ${fmtL(first.sowing)} · ${age>=0?age+' Tage alt':'geplant'}</div>
-        <div class="spill" style="background:${m.colorLight||'var(--gl)'};color:${m.color}">📍 Schlag ${first.schlag||'–'}${first.nacht?' 🌙':''}</div>
-        <div style="font-size:.78rem;margin-top:5px"><strong>${first.flaeche.toFixed(2)} ha</strong> · ca. ${(first.flaeche/0.2).toFixed(0)} h</div>
-        <div style="margin-top:8px"><button class="btn run" style="background:${m.colorLight};color:${m.color};border-color:${m.color}" onclick="setRun('${m.id}','${first.id}')">▶ Jetzt starten</button></div>
+        <div class="now-k">${first.kultur} – Satz ${first.satz}${first.label?' ('+first.label+')':''}</div>
+        <div class="now-d">Aussaat: ${fmtL(first._origSowing||first.sowing)} · ${age>=0?age+' Tage alt':'geplant'}${fPassInfo}</div>
+        <div class="spill" style="background:${m.colorLight||'var(--gl)'};color:${m.color}">📍 Schlag ${first.schlag||'–'}</div>
+        <div style="font-size:.78rem;margin-top:5px"><strong>${first.flaeche.toFixed(2)} ha</strong></div>
       </div>`;
     } else {
       nowHtml=`<div class="now-card" style="border-left-color:${m.color}"><div class="card-lbl" style="color:${m.color}">${m.name}</div><div style="color:var(--tm);padding:.4rem 0;font-size:.82rem">Keine offenen Sätze.</div></div>`;
@@ -910,7 +898,7 @@ function renderHeute(m){
       <div class="nnum ${nc}">${i+1}</div>
       <div class="ninfo">
         <div class="nk">${b.kultur} · S${b.satz} · Schl.${b.schlag||'–'}</div>
-        <div class="nd">${fmtS(b.sowing)} · ${age>=0?age+'d':'geplant'} · ${b.flaeche.toFixed(2)} ha</div>
+        <div class="nd">${b.label?b.label+' · ':''}${fmtS(b.sowing)} · ${age>=0?age+'d alt':'geplant'} · ${b.flaeche.toFixed(2)} ha</div>
       </div>
       <button class="btn p" style="font-size:.66rem;padding:2px 6px;background:${m.color}" onclick="setRun('${m.id}','${b.id}')">▶ Start</button>
     </div>`;
@@ -996,6 +984,7 @@ function getWeekPlan(m){
         const fakeSow=localDateStr(new Date(fakeMs));
         const pDoneMap=((m.comp||{})[b.id]||{}).passDone||{};
         items.push({...b,id,_origId:b.id,_passIdx:passIdx,sowing:fakeSow,
+          _origSowing:b.sowing,
           passNum:passIdx+1,totalPasses:n,dueDay,
           _kulturTarget:dueDay,
           label:`DG ${passIdx+1}/${n} (Tag ${dueDay})`,fieldSwitch:false});
@@ -1115,10 +1104,10 @@ function renderWoche(m){
 
     let prevS=null;
     day.items.forEach(it=>{
-      const age=dDiff(it.sowing,TODAY);
+      const age=dDiff(it._origSowing||it.sowing,TODAY);
       const isw=prevS&&prevS!==it.schlag;
       html+=`${isw?`<div style="font-size:.57rem;color:var(--amber);font-weight:700;margin:1px 2px">↕→${it.schlag}</div>`:''}
-      <div class="wcard day-c ${!it.isManual&&age>(it._kulturTarget||(m.targetDays||7))?'overdue-c':''}"
+      <div class="wcard day-c ${!it.isManual&&dDiff(it._origSowing||it.sowing,TODAY)>(it._kulturTarget||(m.targetDays||7))?'overdue-c':''}"
         style="${it.isManual?'background:var(--bl);color:var(--blue);border-color:var(--blue);':''}"
         data-id="${it.id}" data-mid="${m.id}"
         onmousedown="ddDown(event,'${it.id}','${m.id}')"
@@ -1130,8 +1119,20 @@ function renderWoche(m){
           const wPassStr=it.totalPasses>1?' '+Array.from({length:it.totalPasses},(_,i)=>wPassDone[i]?'✓':'○').join('')+' DG'+it.passNum+'/'+it.totalPasses:'';
           return it.kultur.replace(/^\d+\s*/,'')+' S'+it.satz+(it.schlag?' ·'+it.schlag:'')+wPassStr;
         })()}</div>
-        <div class="wd">${it.flaeche.toFixed(2)} ha · ${age>=0?age+'d':'geplant'}${!it.isManual&&age>(it._kulturTarget||(m.targetDays||7))?` <b style="color:var(--red)">⚠ +`+(age-(m.targetDays||7))+`d</b>`:''}</div>
-      </div>`;
+        <div class="wd">${it.flaeche.toFixed(2)} ha · ${age>=0?age+'d alt':'geplant'}${it.dueDay?(()=>{
+          const realAge=dDiff(it._origSowing||it.sowing,TODAY);
+          const tgt=it._kulturTarget||it.dueDay||7;
+          const overdue=!it.isManual&&realAge>tgt;
+          const daysOver=realAge-tgt;
+          const daysLeft=tgt-realAge;
+          return overdue
+            ?` · <b style="color:var(--red)">⚠ seit ${daysOver}d überfällig</b>`
+            :daysLeft===0?` · <b style="color:var(--amber)">heute fällig</b>`
+            :` · in ${daysLeft}d fällig`;
+        })():(!it.isManual&&age>(it._kulturTarget||(m.targetDays||7))?` · <b style="color:var(--red)">⚠ seit ${age-(it._kulturTarget||(m.targetDays||7))}d überfällig</b>`:'')}</div>
+      </div>
+      <button onclick="doneMark('${m.id}','${it.id}')" 
+        style="width:100%;font-size:.65rem;padding:2px;border-radius:0 0 5px 5px;border:.5px solid var(--border);border-top:none;background:var(--gl);color:var(--gd);cursor:pointer;margin-bottom:3px;">✓ Fertig</button>`;
       prevS=it.schlag;
     });
 
@@ -1173,7 +1174,14 @@ function renderWoche(m){
         <div class="pk">${b.kultur.replace(/^\d+\s*/,'')} S${b.satz}${passLabel}
           ${also.map(mx=>`<span class="assigned-badge" style="background:${mx.colorLight||'#eee'};color:${mx.color}">${mx.name}</span>`).join('')}
         </div>
-        <div class="pd">${b.schlag} · ${b.flaeche.toFixed(2)} ha${overdue?` · <b>+${age-(b._kulturTarget||(m.targetDays||7))}d ⚠</b>`:age>=0?` · ${age}d`:''}</div>
+        <div class="pd">${b.schlag} · ${b.flaeche.toFixed(2)} ha · ${age>=0?age+'d alt':'geplant'}${(()=>{
+        const tgt=b._kulturTarget||(m.targetDays||7);
+        const daysOver=age-tgt;
+        const daysLeft=tgt-age;
+        return overdue?` · <b style="color:var(--red)">⚠ seit ${daysOver}d überfällig</b>`
+          :age===tgt?` · <b style="color:var(--amber)">heute fällig</b>`
+          :age>=0?` · in ${daysLeft}d fällig`:'';
+      })()}</div>
       </div>`;
     });
   }
@@ -1266,6 +1274,7 @@ function ddMoveHandler(e){
   const g=_ghost();
   g.style.left=(x+14)+'px';
   g.style.top=(y-40)+'px';
+  DD.lastY=y;
 
   // Find drop zone using elementFromPoint
   // Temporarily hide ghost so it doesn't interfere
@@ -1314,8 +1323,27 @@ function ddUpHandler(e){
 
       if(!toPool&&targetDs){
         if(!targetM.weekPlan[targetDs])targetM.weekPlan[targetDs]=[];
-        if(!targetM.weekPlan[targetDs].includes(id))
-          targetM.weekPlan[targetDs].push(id);
+        // Remove first if already in this day
+        targetM.weekPlan[targetDs]=targetM.weekPlan[targetDs].filter(x=>x!==id);
+        // Find insert position based on Y coordinate of drop
+        const cards=Array.from(document.querySelectorAll(
+          `.day-col[data-ds="${targetDs}"] .wcard`
+        ));
+        let insertIdx=targetM.weekPlan[targetDs].length; // default: end
+        if(cards.length>0){
+          const dropY=DD.lastY||0;
+          for(let i=0;i<cards.length;i++){
+            const rect=cards[i].getBoundingClientRect();
+            if(dropY<rect.top+rect.height/2){
+              // Find which batch ID this card represents
+              const cardId=cards[i].dataset.id;
+              const pos=targetM.weekPlan[targetDs].indexOf(cardId);
+              insertIdx=pos>=0?pos:i;
+              break;
+            }
+          }
+        }
+        targetM.weekPlan[targetDs].splice(insertIdx,0,id);
       }
 
       save();
@@ -1362,13 +1390,18 @@ function renderAlle(m){
 
   // Which batches are in which machine's weekPlan
   // Build assignMap with machine AND day info
+  // Also map pass IDs back to original batch ID
   const assignMap={};
   S.machines.forEach(mx=>{
     Object.entries(mx.weekPlan||{}).forEach(([dayStr,ids])=>{
       (ids||[]).forEach(id=>{
-        if(!assignMap[id])assignMap[id]=[];
-        if(!assignMap[id].find(x=>x.id===mx.id&&x.day===dayStr))
-          assignMap[id].push({...mx,day:dayStr});
+        // For pass IDs (origId__pass0), map to original ID too
+        const origId=id.replace(/__pass\d+$/,'');
+        [id, origId].forEach(mapId=>{
+          if(!assignMap[mapId])assignMap[mapId]=[];
+          if(!assignMap[mapId].find(x=>x.id===mx.id&&x.day===dayStr))
+            assignMap[mapId].push({...mx,day:dayStr,planId:id});
+        });
       });
     });
   });
@@ -1397,15 +1430,16 @@ function renderAlle(m){
 
   batches.forEach((b,idx)=>{
     const st=status(b,m);const c=(m.comp||{})[b.id]||{};
-    const isDone=!!c.done;const isRun=m.running===b.id;
-    const age=dDiff(b.sowing,TODAY);
-    tHa+=b.flaeche;if(isDone)dHa+=b.flaeche;
-    const assigned=assignMap[b.id]||[];
-
     // Pass info for this batch
     const bCfg=(m.passesConfig||{})[b.kultur]||{n:1,days:'7'};
     const bN=parseInt(bCfg.n)||1;
-    const bPassDone=c.passDone||{};
+    const bOrigId=b.id.replace(/__pass\d+$/,'');
+    const bComp2=(m.comp||{})[bOrigId]||{};
+    const isDone=!!(bComp2.done||c.done);const isRun=m.running===b.id;
+    const age=dDiff(b.sowing,TODAY);
+    tHa+=b.flaeche;if(isDone)dHa+=b.flaeche;
+    const assigned=assignMap[b.id]||[];
+    const bPassDone=bComp2.passDone||{};
     const bDoneCount=Object.values(bPassDone).filter(Boolean).length;
     const passInfo=bN>1
       ?`<span style="font-size:.65rem;font-weight:700;margin-left:4px;padding:1px 7px;border-radius:10px;background:${bDoneCount===bN?'var(--gl)':bDoneCount>0?'var(--al)':'#eee'};color:${bDoneCount===bN?'var(--gd)':bDoneCount>0?'var(--amber)':'#888'}">
@@ -1413,11 +1447,28 @@ function renderAlle(m){
       </span>`
       :'<span style="font-size:.65rem;color:var(--tm);margin-left:4px">1 DG</span>';
 
-    let badge=isDone?'<span class="badge bg2">✓ Fertig</span>'
-      :isRun?`<span class="badge bp2">▶ ${m.name}</span>`
-      :st==='overdue'?`<span class="badge br2">⚠ +${age-(m.targetDays||7)}d</span>`
-      :st==='due'?`<span class="badge ba2">⏳ ${age}d</span>`
-      :'<span class="badge bgr">Geplant</span>';
+    let badge;
+    if(isDone){
+      badge='<span class="badge bg2">✓ Fertig</span>';
+    } else if(bN>1){
+      // Show per-pass status
+      const bDaysList=String(bCfg.days||'7').split(',').map(d=>parseInt(d.trim())||7);
+      const realAge=dDiff(b.sowing,TODAY);
+      const passStatuses=Array.from({length:bN},(_,p)=>{
+        const pDone=(bPassDone||{})[p];
+        if(pDone)return `<span class="badge bg2" style="font-size:.6rem">DG${p+1}✓</span>`;
+        const pDay=bDaysList[p]||7;
+        const daysLeft=pDay-realAge;
+        if(daysLeft<0)return `<span class="badge br2" style="font-size:.6rem">DG${p+1} +${Math.abs(daysLeft)}d ⚠</span>`;
+        if(daysLeft===0)return `<span class="badge ba2" style="font-size:.6rem">DG${p+1} heute</span>`;
+        return `<span class="badge bgr" style="font-size:.6rem">DG${p+1} in ${daysLeft}d</span>`;
+      });
+      badge=passStatuses.join(' ');
+    } else {
+      badge=st==='overdue'?`<span class="badge br2">⚠ +${age-(b._kulturTarget||(m.targetDays||7))}d</span>`
+        :st==='due'?`<span class="badge ba2">⏳ ${age}d</span>`
+        :'<span class="badge bgr">Geplant</span>';
+    }
 
     const rc=isRun?'runrow':isDone?'donerow':'';
 
@@ -1446,11 +1497,15 @@ function renderAlle(m){
       }).join(''):'–'}</td>
       <td><input type="date" value="${c.doneDate||''}" onchange="setDone('${m.id}','${b.id}',this.value)"></td>
       <td><input type="text" placeholder="Notiz..." value="${(m.notes||{})[b.id]||''}" onchange="setNote('${m.id}','${b.id}',this.value)"></td>
-      <td style="display:flex;gap:3px;">
+      <td style="display:flex;gap:3px;flex-wrap:wrap;">
         ${isDone
-          ?`<button class="btn dr" onclick="undoDone('${m.id}','${b.id}')">✕</button>`
-          :isRun
-            ?`<button class="btn p" style="background:${m.color}" onclick="doneMark('${m.id}','${b.id}')">✓</button>`
+          ?`<button class="btn dr" onclick="undoDone('${m.id}','${b.id}')">✕ Reset</button>`
+          :bN>1
+            // Show per-pass buttons
+            ?Array.from({length:bN},(_,p)=>bPassDone[p]
+              ?`<span style="font-size:.65rem;color:var(--gm);padding:2px 5px">DG${p+1}✓</span>`
+              :`<button class="btn p" style="background:${m.color};font-size:.65rem;padding:2px 6px" onclick="doneMark('${m.id}','${b.id}__pass${p}')">DG${p+1} ✓</button>`
+            ).join('')
             :`<button class="btn run" style="background:${m.colorLight||'var(--gl)'};color:${m.color};border-color:${m.color}" onclick="setRun('${m.id}','${b.id}')">▶</button>
               <button class="btn p" style="background:${m.color}" onclick="doneMark('${m.id}','${b.id}')">✓</button>`
         }
