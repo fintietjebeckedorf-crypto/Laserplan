@@ -153,7 +153,11 @@ async function loadData(){
   syncDot('syncing');
   try{
     const r=await fetch(SB_URL+'/rest/v1/laserplan?id=eq.main&select=data,updated_at',{headers:SB_HDR});
-    if(!r.ok){syncDot('error');return;}
+    if(!r.ok){
+      syncDot('error');
+      document.getElementById('main').innerHTML=`<div class="empty"><div class="icon">❌</div><div>Fehler ${r.status} beim Laden</div></div>`;
+      return;
+    }
     const rows=await r.json();
     if(!rows||!rows.length||!rows[0].data){syncDot('ok');render();return;}
     const newTs=rows[0].updated_at||'';
@@ -163,7 +167,10 @@ async function loadData(){
       render();
     }
     syncDot('ok');
-  }catch(e){syncDot('error');console.error(e);}
+  }catch(e){
+    syncDot('error');
+    document.getElementById('main').innerHTML=`<div class="empty"><div class="icon">❌</div><div>Verbindungsfehler</div><div style="font-size:.8rem;margin-top:.5rem">${e.message}</div></div>`;
+  }
 }
 
 async function saveData(){
