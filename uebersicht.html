@@ -214,17 +214,24 @@ function render(){
   var m=getMach(selMachine);
 
   // Get kulturen for selected machine
-  var machineKulturen=null;
-  if(m&&m.kulturen===null){
-    machineKulturen=[];
-  } else if(m&&m.kulturen&&m.kulturen.length>0){
-    machineKulturen=m.kulturen;
+  // m.kulturen===null = NO kulturen (e.g. Pflug) -> show nothing
+  // m.kulturen===[] = ALL kulturen -> show all
+  // m.kulturen=[...] = specific list
+  var machineKulturen=null; // null = no filter (show all)
+  var machineHasNoKulturen=false;
+  if(m){
+    if(m.kulturen===null){
+      machineHasNoKulturen=true; // Pflug - only manual fields
+    } else if(m.kulturen&&m.kulturen.length>0){
+      machineKulturen=m.kulturen; // specific kulturen
+    }
+    // m.kulturen===[] means all kulturen -> machineKulturen stays null (no filter)
   }
 
   // All unique kulturen (filtered by machine if selected)
   var allKulturen=[];
   batches.forEach(function(b){
-    if(machineKulturen===null)return; // no kulturen machine
+    if(machineHasNoKulturen)return; // no kulturen machine
     if(machineKulturen&&machineKulturen.indexOf(b.kultur)<0)return;
     if(allKulturen.indexOf(b.kultur)<0)allKulturen.push(b.kultur);
   });
@@ -269,7 +276,7 @@ function render(){
   var filtered=batches.filter(function(b){
     if(!b.pending&&filterStatus!=='done')return false;
     // Machine kultur filter
-    if(machineKulturen===null)return false;
+    if(machineHasNoKulturen)return false; // Pflug has no batches
     if(machineKulturen&&machineKulturen.length&&machineKulturen.indexOf(b.kultur)<0)return false;
     // Kultur filter
     if(filterKultur&&b.kultur!==filterKultur)return false;
@@ -324,19 +331,14 @@ function render(){
     // Find planned date
     var plannedDay='';
     var plannedMachine='';
-    if(m){
-      var wp=m.weekPlan||{};
+    // Always check all machines for planned date
+    ms.forEach(function(mx){
+      var wp=mx.weekPlan||{};
       Object.keys(wp).forEach(function(d){
-        if((Array.isArray(wp[d])?wp[d]:Object.values(wp[d]||{})).indexOf(b.id)>=0){plannedDay=d;plannedMachine=m.name;}
+        var ids=Array.isArray(wp[d])?wp[d]:Object.values(wp[d]||{});
+        if(ids.indexOf(b.id)>=0){plannedDay=d;plannedMachine=mx.name;}
       });
-    } else {
-      ms.forEach(function(mx){
-        var wp=mx.weekPlan||{};
-        Object.keys(wp).forEach(function(d){
-          if((Array.isArray(wp[d])?wp[d]:Object.values(wp[d]||{})).indexOf(b.id)>=0){plannedDay=d;plannedMachine=mx.name;}
-        });
-      });
-    }
+    });
 
     html+='<div class="'+cls+'">';
     html+='<div class="bkultur">'+b.kultur+'</div>';

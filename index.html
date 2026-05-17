@@ -1177,6 +1177,18 @@ function renderWoche(m){
             :` · in ${daysLeft}d fällig`;
         })():(!it.isManual&&age>(it._kulturTarget||(m.targetDays||7))?` · <b style="color:var(--red)">⚠ seit ${age-(it._kulturTarget||(m.targetDays||7))}d überfällig</b>`:'')}</div>
       </div>
+      ${m.duenger&&!it.isManual?`<div style="display:flex;gap:4px;margin-top:3px;">
+        <input type="text" placeholder="Düngerart"
+          value="${((m.duengerData||{})[it._origId||it.id]||{}).art||''}" 
+          data-mid="${m.id}" data-bid="${it._origId||it.id}" data-field="art"
+          onchange="setDuenger(this.dataset.mid,this.dataset.bid,'art',this.value)"
+          style="flex:1;font-size:.62rem;padding:2px 4px;border:.5px solid var(--border);border-radius:4px;">
+        <input type="number" placeholder="kg/ha"
+          value="${((m.duengerData||{})[it._origId||it.id]||{}).menge||''}" 
+          data-mid="${m.id}" data-bid="${it._origId||it.id}" data-field="menge"
+          onchange="setDuenger(this.dataset.mid,this.dataset.bid,'menge',this.value)"
+          style="width:60px;font-size:.62rem;padding:2px 4px;border:.5px solid var(--border);border-radius:4px;">
+      </div>`:''}
       <button onclick="doneMark('${m.id}','${it.id}')" 
         style="width:100%;font-size:.65rem;padding:2px;border-radius:0 0 5px 5px;border:.5px solid var(--border);border-top:none;background:var(--gl);color:var(--gd);cursor:pointer;margin-bottom:3px;">✓ Fertig</button>`;
       prevS=it.schlag;
