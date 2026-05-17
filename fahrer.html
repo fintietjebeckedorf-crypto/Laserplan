@@ -158,23 +158,20 @@ function toast(msg){
 
 async function loadData(){
   syncDot('syncing');
+  const main=document.getElementById('main');
   try{
     const r=await fetch(SB_URL+'/rest/v1/laserplan?id=eq.main&select=data,updated_at',{headers:SB_HDR});
-    if(!r.ok){
-      syncDot('error');
-      document.getElementById('main').innerHTML=`<div class="empty"><div class="icon">❌</div><div>Fehler ${r.status} beim Laden</div></div>`;
-      return;
-    }
+    main.innerHTML='<div style="padding:1rem;font-size:.8rem">HTTP: '+r.status+'</div>';
+    if(!r.ok){syncDot('error');return;}
     const rows=await r.json();
+    main.innerHTML='<div style="padding:1rem;font-size:.8rem">Zeilen: '+rows.length+' | Daten: '+(rows[0]&&rows[0].data?'ja':'nein')+'</div>';
     if(!rows||!rows.length||!rows[0].data){syncDot('ok');render();return;}
-    const newTs=rows[0].updated_at||'';
-    lastServerTs=newTs;
     S=fixArrays(rows[0].data);
-    render();
-    syncDot('ok');
+    main.innerHTML='<div style="padding:1rem;font-size:.8rem">S geladen: '+S.machines?.length+' Maschinen, '+S.batches?.length+' Sätze</div>';
+    setTimeout(()=>{render();syncDot('ok');},500);
   }catch(e){
     syncDot('error');
-    document.getElementById('main').innerHTML=`<div class="empty"><div class="icon">❌</div><div>Verbindungsfehler</div><div style="font-size:.8rem;margin-top:.5rem">${e.message}</div></div>`;
+    main.innerHTML='<div style="padding:1rem;color:red">Fehler: '+e.message+'</div>';
   }
 }
 
