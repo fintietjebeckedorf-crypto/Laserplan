@@ -239,7 +239,7 @@ function render(){
   html+='<button class="mbtn'+(selMachine===null?' on':'')+'" style="'+(selMachine===null?'background:#172015;border-color:#172015;color:#9FE1CB;':'')+'" onclick="selM(null)">Alle</button>';
   ms.forEach(function(mx){
     var on=mx.id===selMachine;
-    html+='<button class="mbtn'+(on?' on':'')+'" style="border-color:'+mx.color+';'+(on?'background:'+mx.color+';color:#fff;':'')+'" onclick="selM(''+mx.id+'')">'+mx.name+'</button>';
+    html+='<button class="mbtn'+(on?' on':'')+'" style="border-color:'+mx.color+';'+(on?'background:'+mx.color+';color:#fff;':'')+'" onclick="selM(\''+mx.id+'\')">'+mx.name+'</button>';
   });
   html+='</div></div>';
 
@@ -249,7 +249,7 @@ function render(){
   // Kultur filter
   if(allKulturen.length>1){
     html+='<div class="filters">';
-    html+='<button class="fbtn'+(filterKultur===''?' on':'')+'" onclick="filterKultur='';render()">Alle Kulturen</button>';
+    html+='<button class="fbtn'+(filterKultur===''?' on':'')+'" onclick="filterKultur=\'\';render()">Alle Kulturen</button>';
     allKulturen.forEach(function(k){
       var label=k.replace(/^\d+\s*/,'');
       html+='<button class="fbtn'+(filterKultur===k?' on':'')+'" onclick="setFilterKultur(this.dataset.k)" data-k="'+k.replace(/"/g,'&quot;')+'">'  +label+'</button>';
@@ -261,7 +261,7 @@ function render(){
   html+='<div class="filters">';
   var statuses=[['all','Alle'],['open','Offen'],['due','Fällig'],['overdue','Überfällig'],['done','Fertig']];
   statuses.forEach(function(f){
-    html+='<button class="fbtn'+(filterStatus===f[0]?' on':'')+'" onclick="filterStatus=''+f[0]+'';render()">'+f[1]+'</button>';
+    html+='<button class="fbtn'+(filterStatus===f[0]?' on':'')+'" onclick="filterStatus=\''+f[0]+'\'  ;render()">'+f[1]+'</button>';
   });
   html+='</div>';
 
@@ -327,13 +327,13 @@ function render(){
     if(m){
       var wp=m.weekPlan||{};
       Object.keys(wp).forEach(function(d){
-        if((wp[d]||[]).indexOf(b.id)>=0){plannedDay=d;plannedMachine=m.name;}
+        if((Array.isArray(wp[d])?wp[d]:Object.values(wp[d]||{})).indexOf(b.id)>=0){plannedDay=d;plannedMachine=m.name;}
       });
     } else {
       ms.forEach(function(mx){
         var wp=mx.weekPlan||{};
         Object.keys(wp).forEach(function(d){
-          if((wp[d]||[]).indexOf(b.id)>=0){plannedDay=d;plannedMachine=mx.name;}
+          if((Array.isArray(wp[d])?wp[d]:Object.values(wp[d]||{})).indexOf(b.id)>=0){plannedDay=d;plannedMachine=mx.name;}
         });
       });
     }
@@ -353,7 +353,7 @@ function render(){
 
     if(!isDone&&selMachine){
       html+='<div class="plan-row">';
-      html+='<input type="date" value="'+plannedDay+'" onchange="planBatch(''+b.id+'',this.value)" />';
+      html+='<input type="date" value="'+plannedDay+'" data-bid="'+b.id+'" onchange="planBatch(this.dataset.bid,this.value)" />';
       if(plannedDay)html+='<span class="plan-badge">✓ eingeplant</span>';
       html+='</div>';
     }
@@ -392,7 +392,7 @@ function render(){
         html+='<div class="bmeta"><span>'+f.ha.toFixed(2)+' ha</span></div>';
         if(!done){
           html+='<div class="plan-row">';
-          html+='<button onclick="doneManualField(''+m.id+'','+i+')" style="padding:4px 12px;border:none;border-radius:8px;background:#EAF3DE;color:#27500A;font-size:.75rem;font-weight:700;cursor:pointer;">✓ Fertig</button>';
+          html+='<button onclick="doneManualField(this.dataset.mid,'+i+')" data-mid="'+m.id+'" style="padding:4px 12px;border:none;border-radius:8px;background:#EAF3DE;color:#27500A;font-size:.75rem;font-weight:700;cursor:pointer;">✓ Fertig</button>';
           html+='</div>';
         }
         html+='</div>';
