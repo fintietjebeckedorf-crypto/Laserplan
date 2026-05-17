@@ -89,6 +89,13 @@ header h1{font-size:1rem;font-weight:700;}
 <div id="toast"></div>
 
 <script>
+window.onerror=function(msg,src,line){
+  document.getElementById('main').innerHTML=
+    '<div style="padding:1rem;background:#fee;border-radius:8px;color:#900;font-family:monospace;font-size:.8rem">'+
+    '<b>Fehler:</b> '+msg+'<br>Zeile: '+line+'</div>';
+  return false;
+};
+
 const SB_URL='https://lcxvknjhbxhgfkdfwloo.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxjeHZrbmpoYnhoZ2ZrZGZ3bG9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MzQxMzYsImV4cCI6MjA5NDQxMDEzNn0.XS2bKx-_96pEC5aY0lcMzRVwH_ce5xRM6bX86ZbxnaA';
 const SB_HDR={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
