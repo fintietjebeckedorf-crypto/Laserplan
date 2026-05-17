@@ -71,7 +71,8 @@ var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI
 
 var S=null;
 var selMachine=localStorage.getItem('u_mid')||null;
-var filterStatus='all'; // all, open, due, overdue, done
+var filterStatus='all';
+var filterKultur=''; // all, open, due, overdue, done
 var searchText='';
 
 function setDot(e){document.getElementById('dot').className='dot'+(e?' e':'');}
@@ -122,6 +123,25 @@ function loadData(){
   };
   xhr.onerror=function(){setDot(true);};
   xhr.send();
+}
+
+function addManualField(){
+  if(!selMachine){alert('Bitte zuerst Maschine auswählen');return;}
+  var m=getMach(selMachine);if(!m)return;
+  var schlag=prompt('Schlag-Nummer (z.B. 0012):');
+  if(!schlag)return;
+  var ha=parseFloat(prompt('Fläche in ha (z.B. 3.5):'));
+  if(!ha||ha<=0)return;
+  if(!m.manualFields)m.manualFields=[];
+  m.manualFields.push({schlag:schlag,ha:ha});
+  saveData();render();
+}
+
+function doneManualField(mid,idx){
+  var m=getMach(mid);if(!m)return;
+  if(!m.manualFieldsDone)m.manualFieldsDone=[];
+  if(m.manualFieldsDone.indexOf(idx)<0)m.manualFieldsDone.push(idx);
+  saveData();render();
 }
 
 function saveData(){
@@ -184,70 +204,98 @@ function planBatch(bid,dateVal){
 
 function render(){
   var main=document.getElementById('main');
-  if(!S){main.innerHTML='<div class="empty"><div class="ei">⏳</div>Wird geladen...</div>';return;}
+  if(!S){main.innerHTML='<div class="empty"><div class="ei">load</div>Wird geladen...</div>';return;}
 
   var ms=getMachines();
   var batches=getBatches();
   var today=todayDate();
-  var tStr=dateStr(today);
   var m=getMach(selMachine);
+
+  // Get kulturen for selected machine
+  var machineKulturen=null;
+  if(m&&m.kulturen===null){
+    machineKulturen=[];
+  } else if(m&&m.kulturen&&m.kulturen.length>0){
+    machineKulturen=m.kulturen;
+  }
+
+  // All unique kulturen (filtered by machine if selected)
+  var allKulturen=[];
+  batches.forEach(function(b){
+    if(machineKulturen===null)return; // no kulturen machine
+    if(machineKulturen&&machineKulturen.indexOf(b.kultur)<0)return;
+    if(allKulturen.indexOf(b.kultur)<0)allKulturen.push(b.kultur);
+  });
+  allKulturen.sort();
 
   var html='';
 
   // Machine selector
   html+='<div class="msec">';
-  html+='<div class="mlbl">Maschine für Einplanung</div>';
+  html+='<div class="mlbl">Maschine</div>';
   html+='<div class="mrow">';
+  html+='<button class="mbtn'+(selMachine===null?' on':'')+'" style="'+(selMachine===null?'background:#172015;border-color:#172015;color:#9FE1CB;':'')+'" onclick="selM(null)">Alle</button>';
   ms.forEach(function(mx){
     var on=mx.id===selMachine;
-    html+='<button class="mbtn'+(on?' on':'')+'" style="border-color:'+mx.color+';'+(on?'background:'+mx.color+';':'')+'" onclick="selM(\''+mx.id+'\')">'+mx.name+'</button>';
+    html+='<button class="mbtn'+(on?' on':'')+'" style="border-color:'+mx.color+';'+(on?'background:'+mx.color+';color:#fff;':'')+'" onclick="selM(''+mx.id+'')">'+mx.name+'</button>';
   });
   html+='</div></div>';
 
   // Search
-  html+='<input class="search" type="search" placeholder="🔍 Suche..." value="'+searchText+'" oninput="searchText=this.value;render()" />';
+  html+='<input class="search" type="search" placeholder="Suche Kultur, Satz, Schlag..." value="'+searchText+'" oninput="searchText=this.value;render()" />';
 
-  // Status filters
+  // Kultur filter
+  if(allKulturen.length>1){
+    html+='<div class="filters">';
+    html+='<button class="fbtn'+(filterKultur===''?' on':'')+'" onclick="filterKultur='';render()">Alle Kulturen</button>';
+    allKulturen.forEach(function(k){
+      var label=k.replace(/^\d+\s*/,'');
+      html+='<button class="fbtn'+(filterKultur===k?' on':'')+'" onclick="filterKultur=''+k.replace(/'/g,"\'")+''  ;render()">'+label+'</button>';
+    });
+    html+='</div>';
+  }
+
+  // Status filter
   html+='<div class="filters">';
-  var filters=[['all','Alle'],['open','Offen'],['due','Fällig'],['overdue','Überfällig'],['done','Fertig']];
-  filters.forEach(function(f){
-    html+='<button class="fbtn'+(filterStatus===f[0]?' on':'')+'" onclick="filterStatus=\''+f[0]+'\';render()">'+f[1]+'</button>';
+  var statuses=[['all','Alle'],['open','Offen'],['due','Fällig'],['overdue','Überfällig'],['done','Fertig']];
+  statuses.forEach(function(f){
+    html+='<button class="fbtn'+(filterStatus===f[0]?' on':'')+'" onclick="filterStatus=''+f[0]+'';render()">'+f[1]+'</button>';
   });
   html+='</div>';
 
-  // Filter and sort batches
+  // Filter batches
   var filtered=batches.filter(function(b){
-    // Search filter
+    if(!b.pending&&filterStatus!=='done')return false;
+    // Machine kultur filter
+    if(machineKulturen===null)return false;
+    if(machineKulturen&&machineKulturen.length&&machineKulturen.indexOf(b.kultur)<0)return false;
+    // Kultur filter
+    if(filterKultur&&b.kultur!==filterKultur)return false;
+    // Search
     if(searchText){
       var q=searchText.toLowerCase();
       if(b.kultur.toLowerCase().indexOf(q)<0&&String(b.satz).indexOf(q)<0&&schlagName(b.schlag).toLowerCase().indexOf(q)<0)return false;
     }
-    // Status filter
     var comp=m?(m.comp||{})[b.id]||{}:{};
     var isDone=!!comp.done;
     var age=dDiff(b.sowing,today);
-    var tgt=m?(m.targetDays||7):7;
-    var overdue=!isDone&&age>tgt;
-    var due=!isDone&&age>=0&&age<=tgt;
-    var open=b.pending&&!isDone;
+    var tgt=m?((m.passesConfig&&m.passesConfig[b.kultur])?parseInt((m.passesConfig[b.kultur].days||'7').split(',')[0]):m.targetDays||7):7;
     if(filterStatus==='done')return isDone;
-    if(filterStatus==='overdue')return overdue;
-    if(filterStatus==='due')return due&&age>=tgt-2;
-    if(filterStatus==='open')return open;
+    if(filterStatus==='overdue')return !isDone&&age>tgt;
+    if(filterStatus==='due')return !isDone&&age>=tgt-2&&age<=tgt;
+    if(filterStatus==='open')return !isDone;
     return true;
   });
 
-  // Sort: overdue first, then by age desc
+  // Sort: overdue first then by age desc
   filtered.sort(function(a,b){
-    var ca=m?(m.comp||{})[a.id]||{}:{};
-    var cb=m?(m.comp||{})[b.id]||{}:{};
     var ageA=dDiff(a.sowing,today);
     var ageB=dDiff(b.sowing,today);
     return ageB-ageA;
   });
 
   if(!filtered.length){
-    html+='<div class="empty"><div class="ei">📭</div>Keine Sätze gefunden</div>';
+    html+='<div class="empty"><div class="ei">empty</div>Keine Sätze gefunden</div>';
     main.innerHTML=html;return;
   }
 
@@ -255,14 +303,14 @@ function render(){
     var comp=m?(m.comp||{})[b.id]||{}:{};
     var isDone=!!comp.done;
     var age=dDiff(b.sowing,today);
-    var tgt=m?(m.targetDays||7):7;
+    var tgt=m?((m.passesConfig&&m.passesConfig[b.kultur])?parseInt((m.passesConfig[b.kultur].days||'7').split(',')[0]):m.targetDays||7):7;
     var overdue=!isDone&&age>tgt;
     var dueSoon=!isDone&&age>=tgt-2&&age<=tgt;
 
     var statusClass='done-badge';
     var statusText='Fertig';
     if(!isDone){
-      if(overdue){statusClass='over';statusText='⚠ +' +(age-tgt)+'d';}
+      if(overdue){statusClass='over';statusText='⚠ seit '+(age-tgt)+'d';}
       else if(age===tgt){statusClass='warn';statusText='Heute fällig';}
       else if(dueSoon){statusClass='warn';statusText='in '+(tgt-age)+'d';}
       else if(age>=0){statusClass='ok';statusText=age+'d alt';}
@@ -271,20 +319,22 @@ function render(){
 
     var cls='batch'+(isDone?' done':overdue?' overdue':dueSoon?' due':'');
 
-    // Find planned date for this batch with selected machine
+    // Find planned date
     var plannedDay='';
+    var plannedMachine='';
     if(m){
       var wp=m.weekPlan||{};
       Object.keys(wp).forEach(function(d){
-        if((wp[d]||[]).indexOf(b.id)>=0)plannedDay=d;
+        if((wp[d]||[]).indexOf(b.id)>=0){plannedDay=d;plannedMachine=m.name;}
+      });
+    } else {
+      ms.forEach(function(mx){
+        var wp=mx.weekPlan||{};
+        Object.keys(wp).forEach(function(d){
+          if((wp[d]||[]).indexOf(b.id)>=0){plannedDay=d;plannedMachine=mx.name;}
+        });
       });
     }
-
-    var assigned=getAssigned(b.id);
-    var assignedStr=assigned.map(function(a){
-      var d=new Date(a.day);
-      return a.machine+' '+d.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'});
-    }).join(', ');
 
     html+='<div class="'+cls+'">';
     html+='<div class="bkultur">'+b.kultur+'</div>';
@@ -293,16 +343,62 @@ function render(){
     html+='<div class="bmeta">';
     html+='<span>'+b.flaeche.toFixed(2)+' ha</span>';
     if(age>=0)html+='<span>'+age+'d alt</span>';
-    if(assignedStr)html+='<span style="color:#639922">📅 '+assignedStr+'</span>';
+    if(plannedDay){
+      var pd=new Date(plannedDay);
+      html+='<span style="color:#639922">📅 '+(plannedMachine?plannedMachine+' · ':'')+pd.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'})+'</span>';
+    }
     html+='</div>';
-    if(!isDone){
+
+    if(!isDone&&selMachine){
       html+='<div class="plan-row">';
-      html+='<input type="date" value="'+plannedDay+'" onchange="planBatch(\''+b.id+'\',this.value)" />';
+      html+='<input type="date" value="'+plannedDay+'" onchange="planBatch(''+b.id+'',this.value)" />';
       if(plannedDay)html+='<span class="plan-badge">✓ eingeplant</span>';
       html+='</div>';
     }
+
+    // Manual fields for this batch
+    if(selMachine&&m&&m.kulturen!==null){
+      var mf=m.manualFields||[];
+      var mfDone=m.manualFieldsDone||[];
+      var batchMf=mf.filter(function(f,i){ return mfDone.indexOf(i)<0; });
+      if(batchMf.length){
+        html+='<div style="margin-top:4px;font-size:.68rem;color:#888">📍 Manuelle Felder: ';
+        html+=batchMf.map(function(f,i){return schlagName(f.schlag)+' ('+f.ha.toFixed(2)+' ha)';}).join(', ');
+        html+='</div>';
+      }
+    }
+
     html+='</div>';
   });
+
+  // Manual fields section
+  if(selMachine&&m){
+    var mf=m.manualFields||[];
+    var mfDone=m.manualFieldsDone||[];
+    var mfOpen=mf.filter(function(f,i){return mfDone.indexOf(i)<0;});
+    html+='<div style="margin-top:1rem;margin-bottom:.4rem;display:flex;justify-content:space-between;align-items:center;">';
+    html+='<div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#888">📍 Manuelle Felder ('+mfOpen.length+' offen)</div>';
+    html+='<button onclick="addManualField()" style="font-size:.72rem;padding:3px 10px;border-radius:8px;border:.5px solid #D3D1C7;background:#fff;cursor:pointer;">+ Hinzufügen</button>';
+    html+='</div>';
+    if(mf.length){
+      mf.forEach(function(f,i){
+        var done=mfDone.indexOf(i)>=0;
+        html+='<div class="batch'+(done?' done':'')+'" style="border-left-color:#4A90D9;">';
+        html+='<div class="bkultur">Manuelle Feldaufgabe</div>';
+        html+='<div class="bstatus '+(done?'done-badge':'ok')+'">'+(done?'Fertig':'Offen')+'</div>';
+        html+='<div class="btitle">'+schlagName(f.schlag)+'</div>';
+        html+='<div class="bmeta"><span>'+f.ha.toFixed(2)+' ha</span></div>';
+        if(!done){
+          html+='<div class="plan-row">';
+          html+='<button onclick="doneManualField(''+m.id+'','+i+')" style="padding:4px 12px;border:none;border-radius:8px;background:#EAF3DE;color:#27500A;font-size:.75rem;font-weight:700;cursor:pointer;">✓ Fertig</button>';
+          html+='</div>';
+        }
+        html+='</div>';
+      });
+    } else {
+      html+='<div style="color:#aaa;font-size:.8rem;text-align:center;padding:.5rem">Noch keine manuellen Felder</div>';
+    }
+  }
 
   html+='<div style="text-align:center;font-size:.7rem;color:#aaa;margin-top:.5rem">'+filtered.length+' Sätze</div>';
   main.innerHTML=html;
@@ -310,7 +406,9 @@ function render(){
 
 function selM(id){
   selMachine=id;
-  localStorage.setItem('u_mid',id);
+  if(id)localStorage.setItem('u_mid',id);
+  else localStorage.removeItem('u_mid');
+  filterKultur='';
   render();
 }
 
