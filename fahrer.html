@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Fahrer App – Laserroboter</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fahrer">
+<meta name="theme-color" content="#172015">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#F4F3EF;color:#2C2C2A;font-size:16px;padding-bottom:env(safe-area-inset-bottom);}
+
+header{background:#172015;color:#fff;padding:calc(.8rem + env(safe-area-inset-top)) 1rem .8rem;display:flex;align-items:center;justify-content:space-between;}
+header h1{font-size:1rem;font-weight:700;}
+.sync-dot{width:10px;height:10px;border-radius:50%;background:#9FE1CB;display:inline-block;margin-left:6px;}
+.sync-dot.syncing{background:#EF9F27;animation:pulse .8s infinite;}
+.sync-dot.error{background:#E24B4A;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+.main{padding:1rem;}
+
+/* Machine selector */
+.machine-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:1rem;}
+.m-btn{padding:1rem;border-radius:12px;border:2px solid transparent;background:#fff;cursor:pointer;text-align:left;font-size:.9rem;font-weight:700;transition:all .15s;}
+.m-btn .m-name{font-size:1rem;font-weight:700;}
+.m-btn .m-count{font-size:.75rem;margin-top:3px;opacity:.8;}
+.m-btn.selected{color:#fff;}
+
+/* Day sections */
+.day-section{margin-bottom:1.5rem;}
+.day-header{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#888;margin-bottom:.5rem;padding:.3rem .5rem;background:#E8E6E0;border-radius:6px;}
+.day-header.today{background:#172015;color:#9FE1CB;}
+
+/* Batch card */
+.batch-card{background:#fff;border-radius:12px;border:.5px solid #D3D1C7;margin-bottom:.6rem;overflow:hidden;border-left:4px solid #639922;}
+.batch-card.overdue{border-left-color:#A32D2D;}
+.batch-card.done-card{opacity:.5;border-left-color:#aaa;}
+.batch-body{padding:.85rem 1rem;}
+.batch-kultur{font-size:.75rem;color:#888;margin-bottom:2px;}
+.batch-title{font-size:1.1rem;font-weight:700;margin-bottom:4px;}
+.batch-meta{font-size:.8rem;color:#666;display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
+.batch-meta span{display:inline-flex;align-items:center;gap:3px;}
+.age-badge{padding:2px 8px;border-radius:20px;font-size:.75rem;font-weight:700;}
+.age-ok{background:#EAF3DE;color:#27500A;}
+.age-warn{background:#FAEEDA;color:#BA7517;}
+.age-over{background:#FCEBEB;color:#A32D2D;}
+
+.pass-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;}
+.pass-btn{padding:6px 14px;border-radius:20px;border:1.5px solid #D3D1C7;background:#F4F3EF;font-size:.8rem;font-weight:600;cursor:pointer;transition:all .15s;}
+.pass-btn.done-pass{background:#EAF3DE;color:#27500A;border-color:#639922;}
+.pass-btn.active-pass{border-color:#639922;background:#fff;}
+
+.done-btn{width:100%;padding:.7rem;border:none;border-radius:0 0 8px 8px;font-size:.9rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:background .15s;}
+.done-btn.do-it{background:#EAF3DE;color:#27500A;}
+.done-btn.do-it:active{background:#c8e6c9;}
+.done-btn.undo-it{background:#F4F3EF;color:#888;font-size:.8rem;}
+
+/* Empty state */
+.empty{text-align:center;padding:3rem 1rem;color:#888;}
+.empty .icon{font-size:3rem;margin-bottom:.5rem;}
+
+/* Loading */
+.loading{text-align:center;padding:3rem;color:#888;}
+
+/* Toast */
+#toast{position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);background:#172015;color:#9FE1CB;padding:.6rem 1.2rem;border-radius:20px;font-size:.85rem;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999;white-space:nowrap;}
+#toast.show{opacity:1;}
+
+/* Refresh button */
+.refresh-btn{background:rgba(255,255,255,.15);border:none;color:#9FE1CB;padding:.3rem .7rem;border-radius:20px;font-size:.8rem;cursor:pointer;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🌿 Fahrer App <span class="sync-dot" id="syncDot"></span></h1>
+  <button class="refresh-btn" onclick="loadData()">↻ Laden</button>
+</header>
+
+<div class="main" id="main">
+  <div class="loading">
+    <div style="font-size:2rem;margin-bottom:.5rem">⏳</div>
+    <div>Daten werden geladen...</div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SB_URL='https://lcxvknjhbxhgfkdfwloo.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxjeHZrbmpoYnhoZ2ZrZGZ3bG9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MzQxMzYsImV4cCI6MjA5NDQxMDEzNn0.XS2bKx-_96pEC5aY0lcMzRVwH_ce5xRM6bX86ZbxnaA';
+const SB_HDR={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
+
+const TODAY=new Date();TODAY.setHours(0,0,0,0);
+const DN=['So','Mo','Di','Mi','Do','Fr','Sa'];
+
+let S=null;
+let selectedMachineId=localStorage.getItem('fahrer_machine')||null;
+let lastServerTs='';
+
+function localDateStr(d){
+  const x=new Date(d);
+  return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');
+}
+const Tstr=localDateStr(TODAY);
+
+function dDiff(a,b){return Math.round((new Date(b)-new Date(a))/86400000);}
+function addDays(d,n){const r=new Date(d);r.setDate(r.getDate()+n);return r;}
+function fmtDate(d){return new Date(d).toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'});}
+
+function fixArrays(obj){
+  if(obj===null||obj===undefined)return obj;
+  if(Array.isArray(obj))return obj.map(fixArrays);
+  if(typeof obj!=='object')return obj;
+  const keys=Object.keys(obj);
+  if(keys.length>0&&keys.every(k=>/^\d+$/.test(k))){
+    const arr=new Array(Math.max(...keys.map(Number))+1);
+    keys.forEach(k=>arr[parseInt(k)]=fixArrays(obj[k]));
+    return arr;
+  }
+  const out={};keys.forEach(k=>{out[k]=fixArrays(obj[k]);});
+  return out;
+}
+
+function syncDot(state){
+  const el=document.getElementById('syncDot');if(!el)return;
+  el.className='sync-dot'+(state==='syncing'?' syncing':state==='error'?' error':'');
+}
+
+function toast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),2500);
+}
+
+async function loadData(){
+  syncDot('syncing');
+  try{
+    const r=await fetch(SB_URL+'/rest/v1/laserplan?id=eq.main&select=data,updated_at',{headers:SB_HDR});
+    if(!r.ok){syncDot('error');return;}
+    const rows=await r.json();
+    if(!rows||!rows.length||!rows[0].data){syncDot('ok');render();return;}
+    const newTs=rows[0].updated_at||'';
+    if(newTs!==lastServerTs){
+      lastServerTs=newTs;
+      S=fixArrays(rows[0].data);
+      render();
+    }
+    syncDot('ok');
+  }catch(e){syncDot('error');console.error(e);}
+}
+
+async function saveData(){
+  if(!S)return;
+  syncDot('syncing');
+  try{
+    const payload={id:'main',data:JSON.parse(JSON.stringify(S)),updated_at:new Date().toISOString()};
+    const r=await fetch(SB_URL+'/rest/v1/laserplan',{
+      method:'POST',
+      headers:{...SB_HDR,'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify(payload)
+    });
+    lastServerTs=payload.updated_at;
+    syncDot(r.ok||r.status===201||r.status===204?'ok':'error');
+  }catch(e){syncDot('error');}
+}
+
+function getMachine(id){return (S&&S.machines||[]).find(m=>m.id===id);}
+
+function getOpenBatches(m){
+  if(!S||!S.batches)return[];
+  const batches=Array.isArray(S.batches)?S.batches:Object.values(S.batches||{});
+  if(m.kulturen===null)return[];
+  const mk=m.kulturen&&m.kulturen.length?m.kulturen:null;
+  const cfg=m.passesConfig||{};
+  const result=[];
+  batches.filter(b=>b&&b.pending&&!(m.comp||{})[b.id]?.done&&(!mk||mk.includes(b.kultur)))
+    .forEach(b=>{
+      const pcfg=cfg[b.kultur]||{n:1,days:'7'};
+      const n=parseInt(pcfg.n)||1;
+      const daysList=String(pcfg.days).split(',').map(d=>parseInt(d.trim())||7);
+      if(n<=1){
+        result.push({...b,_kulturTarget:daysList[0]||7});
+      } else {
+        const comp=(m.comp||{})[b.id]||{};
+        const passDone=comp.passDone||{};
+        for(let p=0;p<n;p++){
+          if(passDone[p])continue;
+          const dueDay=daysList[p]||7;
+          result.push({...b,id:b.id+'__pass'+p,_origId:b.id,_passIdx:p,
+            _origSowing:b.sowing,_kulturTarget:dueDay,
+            passNum:p+1,totalPasses:n,dueDay,
+            label:`DG ${p+1}/${n}`});
+        }
+      }
+    });
+  return result;
+}
+
+function getTodayPlan(m){
+  // Get batches planned for today + overdue from past days
+  const weekPlan=m.weekPlan||{};
+  const planned=[];
+  
+  // Check past 7 days + today for planned items
+  for(let d=-7;d<=0;d++){
+    const dayStr=localDateStr(addDays(TODAY,d));
+    const ids=weekPlan[dayStr]||[];
+    ids.forEach(id=>{
+      const origId=id.replace(/__pass\d+$/,'');
+      const b=S.batches.find(x=>x.id===origId||x.id===id);
+      if(!b)return;
+      const comp=(m.comp||{})[origId]||{};
+      if(comp.done)return;
+      // Check if this specific pass is done
+      const passMatch=id.match(/^(.+)__pass(\d+)$/);
+      if(passMatch){
+        const passDone=(comp.passDone||{})[parseInt(passMatch[2])];
+        if(passDone)return;
+      }
+      if(!planned.find(x=>x._planId===id))
+        planned.push({...b,_planId:id,_dayStr:dayStr,_isPast:d<0});
+    });
+  }
+  return planned;
+}
+
+function markDone(mid,id){
+  const m=getMachine(mid);if(!m)return;
+  if(!m.comp)m.comp={};
+  const passMatch=id.match(/^(.+)__pass(\d+)$/);
+  if(passMatch){
+    const origId=passMatch[1];
+    const passIdx=parseInt(passMatch[2]);
+    if(!m.comp[origId])m.comp[origId]={};
+    if(!m.comp[origId].passDone)m.comp[origId].passDone={};
+    m.comp[origId].passDone[passIdx]=true;
+    // Check if all passes done
+    const b=S.batches.find(x=>x.id===origId);
+    const cfg=(m.passesConfig||{})[b?.kultur]||{n:1};
+    const n=parseInt(cfg.n)||1;
+    if(Array.from({length:n},(_,i)=>i).every(i=>m.comp[origId].passDone[i])){
+      m.comp[origId].done=true;m.comp[origId].doneDate=Tstr;
+    }
+    // Remove from weekPlan
+    Object.keys(m.weekPlan||{}).forEach(d=>{
+      m.weekPlan[d]=(m.weekPlan[d]||[]).filter(x=>x!==id);
+      if(!m.weekPlan[d].length)delete m.weekPlan[d];
+    });
+  } else {
+    if(!m.comp[id])m.comp[id]={};
+    const b=S.batches.find(x=>x.id===id);
+    m.comp[id].done=true;m.comp[id].doneDate=Tstr;m.comp[id].haLasered=b?.flaeche||0;
+    Object.keys(m.weekPlan||{}).forEach(d=>{
+      m.weekPlan[d]=(m.weekPlan[d]||[]).filter(x=>x!==id&&!x.startsWith(id+'__pass'));
+      if(!m.weekPlan[d].length)delete m.weekPlan[d];
+    });
+  }
+  S.lastUpdate=new Date().toISOString();
+  saveData();
+  render();
+  toast('✓ Fertig gespeichert');
+}
+
+function undoDone(mid,id){
+  const m=getMachine(mid);if(!m)return;
+  if(!m.comp)m.comp={};
+  const origId=id.replace(/__pass\d+$/,'');
+  if(m.comp[origId]){
+    m.comp[origId].done=false;
+    m.comp[origId].doneDate='';
+    m.comp[origId].passDone={};
+  }
+  S.lastUpdate=new Date().toISOString();
+  saveData();render();toast('Rückgängig gemacht');
+}
+
+function render(){
+  const main=document.getElementById('main');
+  if(!S){
+    main.innerHTML='<div class="loading"><div style="font-size:2rem;margin-bottom:.5rem">⏳</div><div>Wird geladen...</div></div>';
+    return;
+  }
+  const machines=(Array.isArray(S.machines)?S.machines:Object.values(S.machines||{})).filter(m=>m&&m.name);
+  if(!machines.length){
+    main.innerHTML='<div class="empty"><div class="icon">🤖</div><div>Keine Maschinen angelegt</div><div style="font-size:.85rem;margin-top:.5rem">Bitte zuerst in der Planungs-App Maschinen anlegen</div></div>';
+    return;
+  }
+
+  const m=machines.find(x=>x.id===selectedMachineId)||null;
+
+  let html='';
+
+  // Machine selector
+  html+=`<div style="margin-bottom:1rem">
+    <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#888;margin-bottom:.5rem">Meine Maschine</div>
+    <div class="machine-grid">`;
+
+  machines.forEach(mx=>{
+    const open=getOpenBatches(mx);
+    const overdue=open.filter(b=>dDiff(b._origSowing||b.sowing,TODAY)>(b._kulturTarget||(mx.targetDays||7)));
+    const sel=mx.id===selectedMachineId;
+    html+=`<button class="m-btn ${sel?'selected':''}" 
+      style="border-color:${mx.color};${sel?'background:'+mx.color+';':''}"
+      onclick="selectMachine('${mx.id}')">
+      <div class="m-name">${mx.name}</div>
+
+    </button>`;
+  });
+  html+='</div></div>';
+
+  if(!m){
+    html+='<div class="empty"><div class="icon">👆</div><div>Maschine auswählen</div></div>';
+    main.innerHTML=html;return;
+  }
+
+  // Only show today's week plan – exactly what was planned for today
+  const todayStr=localDateStr(TODAY);
+  const todayIds=(m.weekPlan||{})[todayStr]||[];
+  
+  if(!todayIds.length){
+    html+=`<div class="empty"><div class="icon">📅</div><div style="font-weight:700;font-size:1.1rem">Heute nichts geplant</div><div style="font-size:.85rem;margin-top:.5rem">Kein Eintrag im Wochenplan für heute</div></div>`;
+    main.innerHTML=html;return;
+  }
+
+  html+=`<div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#888;margin-bottom:.5rem">Heute – ${new Date().toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'2-digit'})}</div>`;
+
+  todayIds.forEach(id=>{
+    const origId=id.replace(/__pass\d+$/,'');
+    const b=S.batches.find(x=>x.id===origId);
+    if(!b)return;
+    
+    const comp=(m.comp||{})[origId]||{};
+    
+    // Build batch object with pass info if needed
+    const passMatch=id.match(/^(.+)__pass(\d+)$/);
+    let card;
+    if(passMatch){
+      const passIdx=parseInt(passMatch[2]);
+      const cfg=(m.passesConfig||{})[b.kultur]||{n:1,days:'7'};
+      const n=parseInt(cfg.n)||1;
+      const daysList=String(cfg.days).split(',').map(d=>parseInt(d.trim())||7);
+      const dueDay=daysList[passIdx]||7;
+      card={...b,id,_origId:origId,_passIdx:passIdx,_origSowing:b.sowing,
+        _kulturTarget:dueDay,passNum:passIdx+1,totalPasses:n,dueDay,
+        label:`DG ${passIdx+1}/${n}`};
+    } else {
+      const cfg=(m.passesConfig||{})[b.kultur]||{n:1,days:'7'};
+      const daysList=String(cfg.days).split(',').map(d=>parseInt(d.trim())||7);
+      card={...b,_origSowing:b.sowing,_kulturTarget:daysList[0]||7};
+    }
+    
+    html+=renderCard(card,m,false);
+  });
+
+  main.innerHTML=html;
+}
+
+function renderCard(b,m,isOverdue){
+  const origId=b._origId||b.id;
+  const age=dDiff(b._origSowing||b.sowing,TODAY);
+  const tgt=b._kulturTarget||(m.targetDays||7);
+  const daysOver=age-tgt;
+  const daysLeft=tgt-age;
+  const overdue=age>tgt;
+  const comp=(m.comp||{})[origId]||{};
+  const isDone=comp.done;
+
+  let ageCls=overdue?'age-over':age>=tgt-2?'age-warn':'age-ok';
+  let ageText=overdue?`seit ${daysOver}d überfällig`:age===tgt?'heute fällig':`in ${daysLeft}d fällig`;
+
+  let passHtml='';
+  if(b.totalPasses>1){
+    const passDone=comp.passDone||{};
+    passHtml=`<div class="pass-row">`;
+    for(let p=0;p<b.totalPasses;p++){
+      const done=passDone[p];
+      passHtml+=`<div class="pass-btn ${done?'done-pass':'active-pass'}">${done?'✓':''} DG ${p+1}</div>`;
+    }
+    passHtml+='</div>';
+  }
+
+  const isPast=b._isPast;
+  
+  return `<div class="batch-card ${overdue?'overdue':''} ${isDone?'done-card':''}">
+    <div class="batch-body">
+      <div class="batch-kultur">${b.kultur}${b.label?' · '+b.label:''}</div>
+      <div class="batch-title">Satz ${b.satz} – Schlag ${b.schlag||'–'}</div>
+      <div class="batch-meta">
+        <span>${b.flaeche?.toFixed(2)} ha</span>
+      </div>
+      ${passHtml}
+    </div>
+    ${isDone
+      ?`<button class="done-btn undo-it" onclick="undoDone('${m.id}','${b._planId||b.id}')">↩ Rückgängig</button>`
+      :b.totalPasses>1
+        ?`<button class="done-btn do-it" onclick="markDone('${m.id}','${b.id}')">✓ DG ${b.passNum} fertig</button>`
+        :`<button class="done-btn do-it" onclick="markDone('${m.id}','${b._planId||b.id}')">✓ Fertig</button>`
+    }
+  </div>`;
+}
+
+function selectMachine(id){
+  selectedMachineId=id;
+  localStorage.setItem('fahrer_machine',id);
+  render();
+}
+
+// Load and poll
+loadData();
+setInterval(loadData,15000); // refresh every 15 seconds
+</script>
+</body>
+</html>
