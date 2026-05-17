@@ -98,6 +98,7 @@ const DN=['So','Mo','Di','Mi','Do','Fr','Sa'];
 
 let S=null;
 let selectedMachineId=localStorage.getItem('fahrer_machine')||null;
+let selectedDay=0; // 0=heute, 1=morgen
 let lastServerTs='';
 
 function localDateStr(d){
@@ -317,15 +318,25 @@ function render(){
   }
 
   // Only show today's week plan – exactly what was planned for today
-  const todayStr=localDateStr(TODAY);
+  const targetDate=addDays(TODAY,selectedDay);
+  const todayStr=localDateStr(targetDate);
   const todayIds=(m.weekPlan||{})[todayStr]||[];
+  const dayWord=selectedDay===0?'Heute':'Morgen';
   
   if(!todayIds.length){
-    html+=`<div class="empty"><div class="icon">📅</div><div style="font-weight:700;font-size:1.1rem">Heute nichts geplant</div><div style="font-size:.85rem;margin-top:.5rem">Kein Eintrag im Wochenplan für heute</div></div>`;
+    html+=`<div class="empty"><div class="icon">📅</div><div style="font-weight:700;font-size:1.1rem">${dayWord} nichts geplant</div><div style="font-size:.85rem;margin-top:.5rem">Kein Eintrag im Wochenplan</div></div>`;
     main.innerHTML=html;return;
   }
 
-  html+=`<div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#888;margin-bottom:.5rem">Heute – ${new Date().toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'2-digit'})}</div>`;
+  const dayLabel=selectedDay===0
+    ?new Date().toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'2-digit'})
+    :addDays(TODAY,1).toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'2-digit'});
+
+  html+=`<div style="display:flex;gap:8px;margin-bottom:.85rem;">
+    <button onclick="selectDay(0)" style="flex:1;padding:.6rem;border-radius:10px;border:2px solid ${selectedDay===0?m.color:'#D3D1C7'};background:${selectedDay===0?m.color:'#fff'};color:${selectedDay===0?'#fff':'#2C2C2A'};font-size:.9rem;font-weight:700;cursor:pointer;">Heute</button>
+    <button onclick="selectDay(1)" style="flex:1;padding:.6rem;border-radius:10px;border:2px solid ${selectedDay===1?m.color:'#D3D1C7'};background:${selectedDay===1?m.color:'#fff'};color:${selectedDay===1?'#fff':'#2C2C2A'};font-size:.9rem;font-weight:700;cursor:pointer;">Morgen</button>
+  </div>
+  <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#888;margin-bottom:.5rem">${dayLabel}</div>`;
 
   todayIds.forEach(id=>{
     const origId=id.replace(/__pass\d+$/,'');
@@ -405,6 +416,11 @@ function renderCard(b,m,isOverdue){
 function selectMachine(id){
   selectedMachineId=id;
   localStorage.setItem('fahrer_machine',id);
+  render();
+}
+
+function selectDay(d){
+  selectedDay=d;
   render();
 }
 
