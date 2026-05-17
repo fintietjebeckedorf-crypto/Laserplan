@@ -253,7 +253,7 @@ tr.runrow{background:linear-gradient(90deg,var(--gl) 0%,#fff 75%);}
       <input type="number" id="mCap" value="4.4" step="0.1" min="0.1">
     </div>
     <div class="form-row">
-      <label>Zielabstand nach Aussaat/Pflanzung (Tage)</label>
+      <label>Zielabstand Fallback (Tage) – wird pro Kultur durch Durchgangskonfiguration ersetzt</label>
       <input type="number" id="mTarget" value="7" step="1" min="1" max="30">
       <span style="font-size:.68rem;color:var(--tm);margin-top:2px">Sätze werden als überfällig angezeigt wenn sie älter als dieser Wert sind.</span>
     </div>
@@ -492,7 +492,8 @@ function status(b,m){
   if(!b.pending)return'skip';
   if((m.comp||{})[b.id]?.done)return'done';
   const age=dDiff(b.sowing,TODAY);
-  const tgt=m.targetDays||7;
+  // Use per-kultur target if available, else fall back to machine default
+  const tgt=b._kulturTarget||(m.targetDays||7);
   if(age>tgt)return'overdue';if(age>=0)return'due';return'future';
 }
 
@@ -511,19 +512,20 @@ function getOpen(m){
       const pcfg=cfg[b.kultur]||{n:1,days:'7'};
       const n=parseInt(pcfg.n)||1;
       const daysList=String(pcfg.days).split(',').map(d=>parseInt(d.trim())||7);
+      // First day in config = target for this kultur (replaces global targetDays)
+      const kulturTarget=daysList[0]||7;
       if(n<=1){
-        // Single pass - use original sowing date
-        result.push(b);
+        // Single pass - attach kulturTarget so overdue check works per-kultur
+        result.push({...b,_kulturTarget:kulturTarget});
       } else {
-        // Multiple passes - each pass is due at daysList[p] days after original sowing
-        // We shift the fake sowing date so that:
-        // age = dDiff(fakeSowing, TODAY) = targetDays when the pass is due
-        // => fakeSowing = originalSowing + daysList[p] - targetDays
-        const tgt = m.targetDays||7;
+        const tgt=m.targetDays||7;
         const sowDate=new Date(b.sowing);
+        const comp=(m.comp||{})[b.id]||{};
+        const passDone=comp.passDone||{};
         for(let p=0;p<n;p++){
-          const dueDay=daysList[p]||7; // days after original sowing when this pass is due
-          // fakeSowing: shift so that on the due date, age = tgt (= shown as "just due")
+          // Skip if this specific pass is already done
+          if(passDone[p])continue;
+          const dueDay=daysList[p]||7;
           const fakeMs=sowDate.getTime()+(dueDay-tgt)*86400000;
           const fakeSowStr=localDateStr(new Date(fakeMs));
           const pid=b.id+'__pass'+p;
@@ -531,6 +533,8 @@ function getOpen(m){
             ...b,
             id:pid,
             _origId:b.id,
+            _passIdx:p,
+            _kulturTarget:dueDay, // each pass is due exactly at its day
             sowing:fakeSowStr,
             passNum:p+1,
             totalPasses:n,
@@ -550,7 +554,7 @@ function renderMachineBar(){
   S.machines.forEach(m=>{
     const active=m.id===S.activeMachineId;
     const open=getOpen(m);
-    const overdue=open.filter(b=>dDiff(b.sowing,TODAY)>(m.targetDays||7));
+    const overdue=open.filter(b=>dDiff(b.sowing,TODAY)>(b._kulturTarget||(m.targetDays||7)));
     const od=overdue.length;
     h+=`<div class="mtab ${active?'active':''}"
       style="${active?`background:${m.color};border-color:${m.color};`:`border-color:${m.color}40;color:${m.color};`}"
@@ -1090,14 +1094,19 @@ function renderWoche(m){
       const age=dDiff(it.sowing,TODAY);
       const isw=prevS&&prevS!==it.schlag;
       html+=`${isw?`<div style="font-size:.57rem;color:var(--amber);font-weight:700;margin:1px 2px">↕→${it.schlag}</div>`:''}
-      <div class="wcard ${it.isManual?'':''}'day-c' ${!it.isManual&&age>(m.targetDays||7)?'overdue-c':''}"
+      <div class="wcard ${it.isManual?'':''}'day-c' ${!it.isManual&&age>(b._kulturTarget||it._kulturTarget||(m.targetDays||7))?'overdue-c':''}"
         style="${it.isManual?'background:var(--bl);color:var(--blue);border-color:var(--blue);':''}"
         data-id="${it.id}" data-mid="${m.id}"
         onmousedown="ddDown(event,'${it.id}','${m.id}')"
         ontouchstart="ddDown(event,'${it.id}','${m.id}')">
         <span class="drag-handle">⠿</span>
-        <div class="wk">${it.isManual?'📍 Schlag '+it.schlag:it.kultur.replace(/^\d+\s*/,'')+' S'+it.satz+(it.schlag?' ·'+it.schlag:'')+(it.totalPasses>1?' ('+it.label+')':'')}</div>
-        <div class="wd">${it.flaeche.toFixed(2)} ha · ${age>=0?age+'d':'geplant'}${!it.isManual&&age>(m.targetDays||7)?` <b style="color:var(--red)">⚠ +`+(age-(m.targetDays||7))+`d</b>`:''}</div>
+        <div class="wk">${it.isManual?'📍 Schlag '+it.schlag:(()=>{
+          const wComp=(m.comp||{})[it._origId||it.id]||{};
+          const wPassDone=wComp.passDone||{};
+          const wPassStr=it.totalPasses>1?' '+Array.from({length:it.totalPasses},(_,i)=>wPassDone[i]?'✓':'○').join('')+' DG'+it.passNum+'/'+it.totalPasses:'';
+          return it.kultur.replace(/^\d+\s*/,'')+' S'+it.satz+(it.schlag?' ·'+it.schlag:'')+wPassStr;
+        })()}</div>
+        <div class="wd">${it.flaeche.toFixed(2)} ha · ${age>=0?age+'d':'geplant'}${!it.isManual&&age>(it._kulturTarget||(m.targetDays||7))?` <b style="color:var(--red)">⚠ +`+(age-(m.targetDays||7))+`d</b>`:''}</div>
       </div>`;
       prevS=it.schlag;
     });
@@ -1127,15 +1136,20 @@ function renderWoche(m){
   } else {
     poolSorted.forEach(b=>{
       const age=dDiff(b.sowing,TODAY);
-      const overdue=age>(m.targetDays||7);
+      const overdue=age>(b._kulturTarget||(m.targetDays||7));
       const also=otherPlanned[b.id]||[];
+      // Show pass status
+      const bComp=(m.comp||{})[b._origId||b.id]||{};
+      const passDoneMap=bComp.passDone||{};
+      const donePassCount=Object.values(passDoneMap).filter(Boolean).length;
+      const passLabel=b.totalPasses>1?` <span style="font-size:.62rem;font-weight:700;padding:0 5px;border-radius:10px;background:${donePassCount>0?'var(--gl)':'#eee'};color:${donePassCount>0?'var(--gd)':'#888'}">${Array.from({length:b.totalPasses},(_,i)=>passDoneMap[i]?'✓':'○').join('')} DG ${b.passNum}/${b.totalPasses}</span>`:'' ;
       html+=`<div class="pcard ${overdue?'hot':''}" data-id="${b.id}" data-mid="${m.id}"
         onmousedown="ddDown(event,'${b.id}','${m.id}')"
         ontouchstart="ddDown(event,'${b.id}','${m.id}')">
-        <div class="pk">${b.kultur.replace(/^\d+\s*/,'')} S${b.satz}
+        <div class="pk">${b.kultur.replace(/^\d+\s*/,'')} S${b.satz}${passLabel}
           ${also.map(mx=>`<span class="assigned-badge" style="background:${mx.colorLight||'#eee'};color:${mx.color}">${mx.name}</span>`).join('')}
         </div>
-        <div class="pd">${b.schlag} · ${b.flaeche.toFixed(2)} ha${overdue?` · <b>+${age-(m.targetDays||7)}d ⚠</b>`:age>=0?` · ${age}d`:''}</div>
+        <div class="pd">${b.schlag} · ${b.flaeche.toFixed(2)} ha${overdue?` · <b>+${age-(b._kulturTarget||(m.targetDays||7))}d ⚠</b>`:age>=0?` · ${age}d`:''}</div>
       </div>`;
     });
   }
@@ -1354,7 +1368,7 @@ function renderAlle(m){
   html+=`<div class="ov"><table><thead><tr>
     <th>#</th><th>Kultur</th><th>Satz</th><th>Schlag</th><th>ha</th>
     <th>Pflanzung</th><th>Alter</th><th>Status</th>
-    <th>Eingeplant bei</th><th>Fertig am</th><th>Notiz</th><th></th>
+    <th>Eingeplant bei</th><th>Geplant am</th><th>Fertig am</th><th>Notiz</th><th></th>
   </tr></thead><tbody>`;
 
   batches.forEach((b,idx)=>{
@@ -1363,6 +1377,16 @@ function renderAlle(m){
     const age=dDiff(b.sowing,TODAY);
     tHa+=b.flaeche;if(isDone)dHa+=b.flaeche;
     const assigned=assignMap[b.id]||[];
+
+    // Pass info for this batch
+    const bCfg=(m.passesConfig||{})[b.kultur]||{n:1,days:'7'};
+    const bN=parseInt(bCfg.n)||1;
+    const bPassDone=c.passDone||{};
+    const bDoneCount=Object.values(bPassDone).filter(Boolean).length;
+    const passInfo=bN>1
+      ?`<span style="font-size:.62rem;font-weight:700;margin-left:4px;padding:1px 6px;border-radius:10px;background:${bDoneCount>0?'var(--gl)':'#eee'};color:${bDoneCount>0?'var(--gd)':'#888'}">
+        ${Array.from({length:bN},(_,i)=>bPassDone[i]?'✓':'○').join('')} ${bDoneCount}/${bN} DG
+      </span>`:'';
 
     let badge=isDone?'<span class="badge bg2">✓ Fertig</span>'
       :isRun?`<span class="badge bp2">▶ ${m.name}</span>`
@@ -1374,13 +1398,20 @@ function renderAlle(m){
 
     html+=`<tr class="${rc}">
       <td style="color:var(--tm);font-size:.68rem">${idx+1}</td>
-      <td><strong style="font-size:.78rem">${b.kultur}</strong>${b.nacht?' <span class="badge bt2">🌙</span>':''}</td>
+      <td><strong style="font-size:.78rem">${b.kultur}</strong>${passInfo}</td>
       <td style="text-align:center;font-weight:700">${b.satz}</td>
       <td style="font-weight:600">${b.schlag||'–'}</td>
       <td><strong>${b.flaeche.toFixed(2)}</strong></td>
       <td>${fmt(b.sowing)}</td>
       <td style="text-align:center;font-weight:${age>=0?'600':'400'};color:${age>7?'var(--red)':age>=0?'var(--amber)':'var(--tm)'}">${age>=0?age:'–'}</td>
       <td>${badge}</td>
+      <td>
+        <input type="date" 
+          value="${assigned.length&&assigned[0].day?assigned[0].day.slice(0,10):''}" 
+          style="width:118px"
+          onchange="setPlanDate('${m.id}','${b.id}',this.value)"
+          title="Datum im Wochenplan setzen">
+      </td>
       <td>${assigned.length?assigned.map(mx=>{
         const dayDate=new Date(mx.day);
         const dayLbl=mx.day?dayDate.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'}):'';
@@ -1415,17 +1446,67 @@ function setHa(mid,id,val){const m=getMachine(mid);if(!m)return;if(!(m.comp||{})
 function doneMark(mid,id){
   const m=getMachine(mid);if(!m)return;
   if(!m.comp)m.comp={};
-  if(!m.comp[id])m.comp[id]={};
-  const b=S.batches.find(x=>x.id===id);
-  m.comp[id].done=true;m.comp[id].doneDate=Tstr;m.comp[id].haLasered=b?.flaeche||0;
-  if(m.running===id){const next=getOpen(m).find(x=>x.id!==id);m.running=next?next.id:null;}
-  Object.keys(m.weekPlan||{}).forEach(d=>{(m.weekPlan||{})[d]=((m.weekPlan||{})[d]||[]).filter(x=>x!==id);if(!(m.weekPlan||{})[d].length)delete (m.weekPlan||{})[d];});
+  // Check if this is a pass ID (e.g. originalId__pass0)
+  const passMatch=id.match(/^(.+)__pass(\d+)$/);
+  if(passMatch){
+    const origId=passMatch[1];
+    const passIdx=parseInt(passMatch[2]);
+    if(!m.comp[origId])m.comp[origId]={};
+    if(!m.comp[origId].passDone)m.comp[origId].passDone={};
+    m.comp[origId].passDone[passIdx]=true;
+    // Mark whole batch done only if ALL passes done
+    const cfg=(m.passesConfig||{})[S.batches.find(b=>b.id===origId)?.kultur]||{n:1};
+    const n=parseInt(cfg.n)||1;
+    const allDone=Array.from({length:n},(_,i)=>i).every(i=>m.comp[origId].passDone[i]);
+    if(allDone){m.comp[origId].done=true;m.comp[origId].doneDate=Tstr;}
+    // Remove this pass from weekPlan
+    Object.keys(m.weekPlan||{}).forEach(d=>{
+      m.weekPlan[d]=(m.weekPlan[d]||[]).filter(x=>x!==id);
+      if(!m.weekPlan[d].length)delete m.weekPlan[d];
+    });
+    if(m.running===id)m.running=null;
+  } else {
+    if(!m.comp[id])m.comp[id]={};
+    const b=S.batches.find(x=>x.id===id);
+    m.comp[id].done=true;m.comp[id].doneDate=Tstr;m.comp[id].haLasered=b?.flaeche||0;
+    if(m.running===id){const next=getOpen(m).find(x=>x.id!==id);m.running=next?next.id:null;}
+    Object.keys(m.weekPlan||{}).forEach(d=>{
+      m.weekPlan[d]=(m.weekPlan[d]||[]).filter(x=>x!==id&&!x.startsWith(id+'__pass'));
+      if(!m.weekPlan[d].length)delete m.weekPlan[d];
+    });
+  }
   save();renderAll();toast('Fertig ✓');
 }
 function setDone(mid,id,dv){const m=getMachine(mid);if(!m)return;if(!(m.comp||{})[id])(m.comp||{})[id]={};if(dv){(m.comp||{})[id].done=true;(m.comp||{})[id].doneDate=dv;}else{(m.comp||{})[id].done=false;(m.comp||{})[id].doneDate='';}save();renderAll();}
-function undoDone(mid,id){const m=getMachine(mid);if(!m)return;if((m.comp||{})[id]){(m.comp||{})[id].done=false;(m.comp||{})[id].doneDate='';}save();renderAll();}
+function undoDone(mid,id){
+  const m=getMachine(mid);if(!m)return;
+  if(!m.comp)m.comp={};
+  if(m.comp[id]){
+    m.comp[id].done=false;
+    m.comp[id].doneDate='';
+    m.comp[id].passDone={}; // reset all passes
+  }
+  save();renderAll();
+}
 function setNote(mid,id,v){const m=getMachine(mid);if(!m)return;(m.notes||{})[id]=v;save();}
 function m_clearWeek(mid){const m=getMachine(mid);if(!m)return;m.weekPlan={};save();renderWoche(m);}
+
+function setPlanDate(mid,id,dateStr){
+  const m=getMachine(mid);if(!m)return;
+  if(!m.weekPlan)m.weekPlan={};
+  // Remove from all days first
+  Object.keys(m.weekPlan).forEach(d=>{
+    m.weekPlan[d]=(m.weekPlan[d]||[]).filter(x=>x!==id);
+    if(!m.weekPlan[d].length)delete m.weekPlan[d];
+  });
+  // Add to new date if set
+  if(dateStr){
+    if(!m.weekPlan[dateStr])m.weekPlan[dateStr]=[];
+    if(!m.weekPlan[dateStr].includes(id))m.weekPlan[dateStr].push(id);
+    toast(`Satz am ${new Date(dateStr).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})} eingeplant ✓`);
+  }
+  save();renderAlle(m);
+}
 
 function exportCSV(){
   const m=activeMachine();if(!m)return;
