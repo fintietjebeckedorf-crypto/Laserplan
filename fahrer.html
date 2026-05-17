@@ -168,7 +168,10 @@ async function loadData(){
     if(!rows||!rows.length||!rows[0].data){syncDot('ok');render();return;}
     S=fixArrays(rows[0].data);
     main.innerHTML='<div style="padding:1rem;font-size:.8rem">S geladen: '+S.machines?.length+' Maschinen, '+S.batches?.length+' Sätze</div>';
-    setTimeout(()=>{render();syncDot('ok');},500);
+    setTimeout(()=>{
+      try{render();syncDot('ok');}
+      catch(e){document.getElementById('main').innerHTML='<div style="padding:1rem;color:red">render() Fehler: '+e.message+' ('+e.stack+')</div>';}
+    },500);
   }catch(e){
     syncDot('error');
     main.innerHTML='<div style="padding:1rem;color:red">Fehler: '+e.message+'</div>';
